@@ -4,6 +4,8 @@ import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
 
 module {
+    let page_size : Nat64 = 65536;
+
     public type WriteableBand = {
         region : Region;
         var end : Nat64;
@@ -16,11 +18,16 @@ module {
         };
     };
 
+    public func capacity(wb: WriteableBand) : Nat64 {
+        return Region.size(wb.region) * page_size;
+    };
+
     private func ensureFit(wb: WriteableBand, size: Nat64) {
-        while (wb.end + size > Region.size(wb.region)) {
+        while (wb.end + size > capacity(wb)) {
             if (Region.grow(wb.region, 1) == 0xFFFF_FFFF_FFFF_FFFF) {
                 Debug.trap("Out of memory");
             };
+            // Debug.print("Growing region " # debug_show(capacity(wb)));
         };
     };
 

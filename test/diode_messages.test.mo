@@ -4,59 +4,58 @@ import Debug "mo:base/Debug";
 import Nat "mo:base/Nat";
 import Nat32 "mo:base/Nat32";
 import Nat8 "mo:base/Nat8";
-import {test; suite} "mo:test/async";
+import {test; suite} "mo:test";
 import { DiodeMessages } "../src/";
 import ExperimentalCycles "mo:base/ExperimentalCycles";
 import Result "mo:base/Result";
-actor {
+
+module {
   public func runTests() : async () {
-    ExperimentalCycles.add<system>(1_000_000_000_000);
+    var dm = DiodeMessages.new();
 
-    var dm = await DiodeMessages();
-
-    await suite("Add Message", func() : async () {
-      await test("Should fail adding message to inbox", func() : async () {
-        assert Result.isErr(await dm.add_message("key_id", "hash", "ciphertext"));
+    suite("Add Message", func() {
+      test("Should fail adding message to inbox", func() {
+        assert Result.isErr(DiodeMessages.add_message(dm, "key_id", "hash", "ciphertext"));
       });
 
-      await test("Should add message to inbox", func() : async () {
-        assert isOk(await dm.add_message(make_key(1), make_hash(1), "cipertext 1"));
+      test("Should add message to inbox", func() {
+        assert isOk(DiodeMessages.add_message(dm, make_key(1), make_hash(1), "cipertext 1"));
 
-        let message = await dm.get_message_by_id(0);
+        let message = DiodeMessages.get_message_by_id(dm, 0);
         assert message.key_id == make_key(1);
         assert message.hash == make_hash(1);
         assert message.ciphertext == "cipertext 1";
 
-        let ?message2 = await dm.get_message_by_hash(make_hash(1));
+        let ?message2 = DiodeMessages.get_message_by_hash(dm, make_hash(1));
         assert message2.key_id == make_key(1);
         assert message2.hash == make_hash(1);
         assert message2.ciphertext == "cipertext 1";
 
-        assert (await dm.get_min_message_id_by_key(make_key(1))) == ?0;
-        assert (await dm.get_max_message_id_by_key(make_key(1))) == ?0;
-        assert (await dm.get_idx_message_id_by_key(make_key(1), 0)) == ?0;
-        assert (await dm.get_idx_message_id_by_key(make_key(1), 1)) == null;
+        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?0;
+        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?0;
+        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(1), 0)) == ?0;
+        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(1), 1)) == null;
 
-        assert (await dm.get_min_message_id_by_key(make_key(2))) == null;
-        assert (await dm.get_max_message_id_by_key(make_key(2))) == null;
-        assert (await dm.get_idx_message_id_by_key(make_key(2), 0)) == null;
+        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(2))) == null;
+        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(2))) == null;
+        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(2), 0)) == null;
 
-        assert isOk(await dm.add_message(make_key(1), make_hash(2), "cipertext 2"));
+        assert isOk(DiodeMessages.add_message(dm, make_key(1), make_hash(2), "cipertext 2"));
 
-        let message3 = await dm.get_message_by_id(1);
+        let message3 = DiodeMessages.get_message_by_id(dm, 1);
         assert message3.key_id == make_key(1);
         assert message3.hash == make_hash(2);
         assert message3.ciphertext == "cipertext 2";
 
-        let ?message4 = await dm.get_message_by_hash(make_hash(2));
+        let ?message4 = DiodeMessages.get_message_by_hash(dm, make_hash(2));
         assert message4.key_id == make_key(1);
         assert message4.hash == make_hash(2);
         assert message4.ciphertext == "cipertext 2";
 
-        assert (await dm.get_min_message_id_by_key(make_key(1))) == ?0;
-        assert (await dm.get_max_message_id_by_key(make_key(1))) == ?1;
-        assert (await dm.get_idx_message_id_by_key(make_key(1), 0)) == ?0;
-        assert (await dm.get_idx_message_id_by_key(make_key(1), 1)) == ?1;
+        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?0;
+        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?1;
+        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(1), 0)) == ?0;
+        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(1), 1)) == ?1;
       });
     });
   };

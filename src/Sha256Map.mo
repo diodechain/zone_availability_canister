@@ -4,6 +4,20 @@ import Nat64 "mo:base/Nat64";
 import Nat32 "mo:base/Nat32";
 import Region "mo:base/Region";
 
+/**
+ * Work In Progress -- Not yet completed -- Not for use yet
+ *
+ * A map implementation storing fixed size keys and values in stable memory.
+ * Instead of re-hashing on overflow, this map created a new "child" map
+ * with higher capacity and keeps a pointer to the old map.
+ * Then on every put/get operation the old map is imported into the new map key, by key.
+ * 
+ * When the new map (bigger) map reaches capacity the old map is guaranteed to have 
+ * been imported fully and can be discarded.
+ *
+ * The map keeps a overflow buffer for keys that have hash collisions.
+ */
+
 module {
   public type Map = {
     region : Region;
@@ -26,7 +40,7 @@ module {
   };
 
   public func capacity(map: Map) : Nat {
-    return Nat64.toNat(Region.size(map.region)) / element_size(map);
+    return Nat64.toNat(Region.size(map.region) * 65536) / element_size(map);
   };
 
   public func element_size(map: Map) : Nat {
