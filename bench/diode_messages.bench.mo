@@ -21,8 +21,15 @@ module {
       let ?n = Nat.fromText(col);
       var dm = DiodeMessages.new();
 
-      for (i in Iter.range(1, n)) {
+      for (i in Iter.range(0, n - 1)) {
           let _ = DiodeMessages.add_message(dm, make_key(i % 100), make_hash(i), make_blob(100, i));
+      };
+
+      for (i in Iter.range(0, n - 1)) {
+          let msg = DiodeMessages.get_message_by_id(dm, Nat32.fromNat(i));
+          assert msg.key_id == make_key(i % 100);
+          assert msg.hash == make_hash(i);
+          assert msg.ciphertext == make_blob(100, i);
       };
     });
 

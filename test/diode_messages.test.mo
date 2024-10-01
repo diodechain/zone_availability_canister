@@ -6,7 +6,6 @@ import Nat32 "mo:base/Nat32";
 import Nat8 "mo:base/Nat8";
 import {test; suite} "mo:test";
 import { DiodeMessages } "../src/";
-import ExperimentalCycles "mo:base/ExperimentalCycles";
 import Result "mo:base/Result";
 
 module {
