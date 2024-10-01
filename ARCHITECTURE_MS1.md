@@ -13,6 +13,32 @@ On average the size of a diode message is 236 bytes. This includes meta messages
 
 ## Architecture
 
+Overview of the canister interface:
+
+```mermaid
+graph TD
+    subgraph Canister[Diode Message Canister]
+        SM[Store Message]
+        GM[Get Messages]
+        GK[Get Messages Indexed by Encryption Key]
+        IX[Heap Indexes]
+
+        subgraph DS[Data Storage]
+            IR[Inbox Region]
+            KIR[Key Inbox Regions]
+            PR[Cipher Text Region]
+        end
+    end
+
+    C1[Client 1] -->|add_message| SM
+    C2[Client 2] -->|get_message_by_id| GM
+    C3[Client 3] -->|get_*_message_id_by_key| GK
+
+    SM -->|Write| DS[Stable Storage]
+    GM -->|Read| DS
+    GK -->|Read| DS
+```
+
 The canister will be made out of one actor implemented in Motoko. The actor will be responsible for all interactions with the outside world. To leverage the stable storage the new [Region Memory API](https://internetcomputer.org/docs/current/motoko/main/base/Region) will be used.
 
 As of time of writing the ic allows storing 4gb "heap memory" as well as 400gb "stable storage" (https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits). On upgrade of an actor the Motoko runtime will serialize "stable" structures into stable storage" and restore after the upgrade the state into "heap memory". Discussion on the forum indicates that this can be a costly process effectively limiting the maximum usable "heap memory" to 2gb as greater values lead to execution timeouts during code upgrades.
@@ -87,6 +113,20 @@ for a given destination key.
 
 ```mermaid
 erDiagram
+    %% HEAP Maps
+    KEY_INBOX_MAP ||--o{ KEY_INBOX : maps
+    KEY_INBOX_MAP {
+        bytes24 key_id
+        Region region
+        uint64 end_offset
+    }
+    MESSAGE_INDEX ||--o{ INBOX : indexes
+    MESSAGE_INDEX {
+        bytes32 hash
+        uint32 message_id
+    }
+
+    %% REGION Data
     KEY_INBOX ||--o{ INBOX : selects
     KEY_INBOX {
         uint32 id
@@ -97,20 +137,30 @@ erDiagram
         uint32 id
         uint32 timestamp
         bytes24 destination
-        uint32 hash
-        uint32 offset
+        bytes32 hash
+        uint64 offset
         uint32 len
     }
     PAYLOAD {
         bytes cipher_text
     }
 
+    %% Markers
+    HEAP_MARKER[HEAP_MEMORY]
+    REGION_MARKER[STABLE_MEMORY]
 
+    %% Relationships to markers
+    HEAP_MARKER ||--|{ KEY_INBOX_MAP : contains
+    HEAP_MARKER ||--|{ MESSAGE_INDEX : contains
+    REGION_MARKER ||--|{ KEY_INBOX : contains
+    REGION_MARKER ||--|{ INBOX : contains
+    REGION_MARKER ||--|{ PAYLOAD : contains
 ```
 
 ### Data Layout Considerations
 
 - `inbox` (and thus `payload_region`) could be made later into a ring buffer by adding stable `head` and `tail` pointers to the actor. For this the `id` field is introduced now.
+- 
 
 ## Milestone 1
 
