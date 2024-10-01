@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "canisters": {
+    "DiodeMessages": {
+      "type": "motoko",
+      "main": "src/Main.mo"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "mops sources"
+    }
+  }
+}
