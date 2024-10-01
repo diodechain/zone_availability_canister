@@ -7,6 +7,7 @@ import Region "mo:base/Region";
 import Blob "mo:base/Blob";
 import Map "mo:map/Map";
 import WriteableBand "WriteableBand";
+import Debug "mo:base/Debug";
 
 actor class DiodeMessages() {
   type Message = {
@@ -47,7 +48,7 @@ actor class DiodeMessages() {
     // START: Insert message into inbox
     Map.set<Blob, Nat32>(message_index, Map.bhash, hash, inbox_index);
 
-    let timestamp : Nat32 = Nat32.fromNat(abs(now()) / 1_000_000);
+    let timestamp : Nat32 = Nat32.fromNat(abs(now()) / 1_000_000_000);
     let inbox_before = inbox.end;
     WriteableBand.appendNat32(inbox, inbox_index);
     WriteableBand.appendNat32(inbox, timestamp);
@@ -55,7 +56,10 @@ actor class DiodeMessages() {
     WriteableBand.appendBlob(inbox, hash);
     WriteableBand.appendNat64(inbox, before_offset);
     WriteableBand.appendNat32(inbox, Nat32.fromNat(ciphertext.size()));
-    assert (inbox.end == inbox_before + inbox_entry_size);
+    
+    if (inbox.end != inbox_before + inbox_entry_size) {
+      return #err("Inbox end is not equal to inbox before + inbox entry size");
+    };
     // END: Insert message into inbox
 
     // START: Insert message reference into key_inbox
@@ -68,7 +72,9 @@ actor class DiodeMessages() {
     let key_inbox_band_before = key_inbox_band.end;
     WriteableBand.appendNat32(key_inbox_band, inbox_index);
     WriteableBand.appendNat32(key_inbox_band, timestamp);
-    assert (key_inbox_band.end == key_inbox_band_before + key_inbox_entry_size);
+    if (key_inbox_band.end != key_inbox_band_before + key_inbox_entry_size) {
+      return #err("Key inbox band end is not equal to key inbox band before + key inbox band entry size");
+    };
     Map.set<Blob, WriteableBand.WriteableBand>(key_inbox, Map.bhash, key_id, key_inbox_band);
     // END: Insert message reference into key_inbox
 
@@ -148,7 +154,7 @@ actor class DiodeMessages() {
       case (null) { null; };
       case (?value) {
         let offset = Nat64.fromNat32(idx) * key_inbox_entry_size;
-        if (offset > value.end) {
+        if (offset + key_inbox_entry_size > value.end) {
           null;
         } else {
           ?Region.loadNat32(value.region, offset);

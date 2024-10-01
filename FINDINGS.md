@@ -14,7 +14,9 @@
 - https://mops.one/
     Testing + Packaging
     Testing largely undocumented
-    - How to test an actor?
+    - How to test an actor (required to convert to an actor class)?
+    - Very slow like 20+ seconds per test
+    - Mops actor tests don't print Debug.print() output 
 
 - Stable Hash Map
     Official documentation at: https://internetcomputer.org/docs/current/motoko/main/canister-maintenance/upgrades/ 
