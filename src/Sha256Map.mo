@@ -8,7 +8,7 @@ import Region "mo:base/Region";
  * Work In Progress -- Not yet completed -- Not for use yet
  *
  * A map implementation storing fixed size keys and values in stable memory.
- * Instead of re-hashing on overflow, this map created a new "child" map
+ * Instead of re-hashing on overflow, this map creates a new "child" map
  * with higher capacity and keeps a pointer to the old map.
  * Then on every put/get operation the old map is imported into the new map key, by key.
  * 

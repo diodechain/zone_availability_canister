@@ -4,57 +4,73 @@ import Debug "mo:base/Debug";
 import Nat "mo:base/Nat";
 import Nat32 "mo:base/Nat32";
 import Nat8 "mo:base/Nat8";
-import {test; suite} "mo:test";
+import {test; suite} "mo:test/async";
 import { DiodeMessages } "../src/";
 import Result "mo:base/Result";
 
-module {
+actor {
   public func runTests() : async () {
     var dm = DiodeMessages.new();
 
-    suite("Add Message", func() {
-      test("Should fail adding message to inbox", func() {
+    await suite("Add Message", func() : async () {
+      await test("Should fail adding message to inbox", func() : async () {
         assert Result.isErr(DiodeMessages.add_message(dm, "key_id", "hash", "ciphertext"));
       });
 
-      test("Should add message to inbox", func() {
+      await test("Should add one message to inbox", func() : async () {
         assert isOk(DiodeMessages.add_message(dm, make_key(1), make_hash(1), "cipertext 1"));
 
-        let message = DiodeMessages.get_message_by_id(dm, 0);
-        assert message.key_id == make_key(1);
-        assert message.hash == make_hash(1);
-        assert message.ciphertext == "cipertext 1";
+        let message1 = DiodeMessages.get_message_by_id(dm, 1);
+        assert message1.id == 1;
+        assert message1.key_id == make_key(1);
+        assert message1.hash == make_hash(1);
+        assert message1.ciphertext == "cipertext 1";
 
-        let ?message2 = DiodeMessages.get_message_by_hash(dm, make_hash(1));
-        assert message2.key_id == make_key(1);
-        assert message2.hash == make_hash(1);
-        assert message2.ciphertext == "cipertext 1";
+        let ?message1h = DiodeMessages.get_message_by_hash(dm, make_hash(1));
+        assert message1h == message1;
 
-        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?0;
-        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?0;
-        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(1), 0)) == ?0;
-        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(1), 1)) == null;
+        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?1;
+        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?1;
 
         assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(2))) == null;
         assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(2))) == null;
-        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(2), 0)) == null;
+      });
 
+      await test("Should add two messages to inbox", func() : async () {
+        assert isOk(DiodeMessages.add_message(dm, make_key(1), make_hash(1), "cipertext 1"));
+
+        let message1 = DiodeMessages.get_message_by_id(dm, 1);
+        assert message1.id == 1;
+        assert message1.key_id == make_key(1);
+        assert message1.hash == make_hash(1);
+        assert message1.ciphertext == "cipertext 1";
+        assert message1.prev_msg_id == 0;
+        assert message1.next_msg_id == 0;
+
+        let ?message1h = DiodeMessages.get_message_by_hash(dm, make_hash(1));
+        assert message1h == message1;
+        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?1;
+        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?1;
+        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(2))) == null;
+        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(2))) == null;
         assert isOk(DiodeMessages.add_message(dm, make_key(1), make_hash(2), "cipertext 2"));
 
-        let message3 = DiodeMessages.get_message_by_id(dm, 1);
-        assert message3.key_id == make_key(1);
-        assert message3.hash == make_hash(2);
-        assert message3.ciphertext == "cipertext 2";
+        let message2 = DiodeMessages.get_message_by_id(dm, 2);
+        assert message2.id == 2;
+        assert message2.key_id == make_key(1);
+        assert message2.hash == make_hash(2);
+        assert message2.ciphertext == "cipertext 2";
+        assert message2.prev_msg_id == 1;
+        assert message2.next_msg_id == 0;
 
-        let ?message4 = DiodeMessages.get_message_by_hash(dm, make_hash(2));
-        assert message4.key_id == make_key(1);
-        assert message4.hash == make_hash(2);
-        assert message4.ciphertext == "cipertext 2";
+        let ?message2h = DiodeMessages.get_message_by_hash(dm, make_hash(2));
+        assert message2h == message2;
 
-        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?0;
-        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?1;
-        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(1), 0)) == ?0;
-        assert (DiodeMessages.get_idx_message_id_by_key(dm, make_key(1), 1)) == ?1;
+        let message1b = DiodeMessages.get_message_by_id(dm, 1);
+        assert message1b.next_msg_id == 2;
+
+        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?1;
+        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?2;
       });
     });
   };

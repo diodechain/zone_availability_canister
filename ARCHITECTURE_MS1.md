@@ -1,4 +1,4 @@
-# Diode Message Canister
+# Diode Message Canister - Milestone 1 Architecture
 
 This canister is used as availability guarantee for the Diode peer to peer messaging system. When a peer tries to send a message to another peer which is currently offline the Canister will be used as temporary storage.
 
@@ -160,11 +160,5 @@ erDiagram
 ### Data Layout Considerations
 
 - `inbox` (and thus `payload_region`) could be made later into a ring buffer by adding stable `head` and `tail` pointers to the actor. For this the `id` field is introduced now.
-- 
+ 
 
-## Milestone 1
-
-- 10k + 100k message storage test
-- Architecture Document (this)
-- Video Recording of message storage test 
-- GitHub Repo Published (this)

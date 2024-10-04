@@ -32,8 +32,4 @@ actor {
   public func get_max_message_id_by_key(key_id: Blob) : async ?Nat32 {
     DiodeMessages.get_max_message_id_by_key(dm, key_id);
   };
-
-  public func get_idx_message_id_by_key(key_id: Blob, idx: Nat32) : async ?Nat32 {
-    DiodeMessages.get_idx_message_id_by_key(dm, key_id, idx);
-  };
 };
