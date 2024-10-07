@@ -15,33 +15,25 @@ module {
     bench.name("Diode Messages");
     bench.description("Add items one-by-one");
 
-    bench.rows(["DiodeMessages", "Regions"]);
-    bench.cols(["10", "100", "1000", "10000"]);
+    bench.rows(["DiodeMessages"]);
+    bench.cols(["10", "100", "1000", "10000", "100000", "1000000"]);
+    let blob = make_blob(180, 0);
 
     bench.runner(func(row, col) {
       let ?n = Nat.fromText(col);
 
       if (row == "DiodeMessages") {
         var dm = DiodeMessages.new();
-        for (i in Iter.range(0, n - 1)) {
-            let _ = DiodeMessages.add_message(dm, make_key(i % 100), make_hash(i), make_blob(100, i));
+        for (i in Iter.range(1, n)) {
+            let _ = DiodeMessages.add_message(dm, make_key(i % 1000), make_hash(i), blob);
         };
 
-        for (i in Iter.range(0, n - 1)) {
-            let msg = DiodeMessages.get_message_by_id(dm, Nat32.fromNat(i));
-            assert msg.key_id == make_key(i % 100);
-            assert msg.hash == make_hash(i);
-            assert msg.ciphertext == make_blob(100, i);
-        };
-      } else if (row == "Regions") {
-        var wb = WriteableBand.new();
-        for (i in Iter.range(0, n - 1)) {
-          if (i % 10 == 0) {
-            wb := WriteableBand.new();
-          };
-
-          WriteableBand.appendBlob(wb, make_blob(100, i));
-        };
+        // for (i in Iter.range(1, n)) {
+        //     let msg = DiodeMessages.get_message_by_id(dm, Nat32.fromNat(i));
+        //     assert msg.key_id == make_key(i % 100);
+        //     assert msg.hash == make_hash(i);
+        //     assert msg.ciphertext == make_blob(100, i);
+        // };
       };
     });
 

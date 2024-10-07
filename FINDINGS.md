@@ -1,6 +1,6 @@
 # Findings
 
-- The Region library is now avilable and makes accessing simple
+- The Region library is now available and makes accessing simple
     - https://internetcomputer.org/docs/current/motoko/main/base/Region (64gb)
     - https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/storage
     - Documented limits are different:
@@ -15,8 +15,9 @@
     Testing + Packaging
     Testing largely undocumented
     - How to test an actor (required to convert to an actor class)?
-    - Very slow like 20+ seconds per test
+    - Very slow like 20+ seconds per test (*NEED TO CHANGE TO POCKET-ID in mops.toml to make it faster*)
     - Mops actor tests don't print Debug.print() output 
+    Default github action fails (*NEED TO ADD moc to mops.toml*)
 
 - Stable Hash Map
     Official documentation at: https://internetcomputer.org/docs/current/motoko/main/canister-maintenance/upgrades/ 

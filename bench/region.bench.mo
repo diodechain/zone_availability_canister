@@ -13,7 +13,7 @@ module {
 
     bench.name("Test the regions");
     bench.rows(["Regions"]);
-    bench.cols(["1", "10", "100", "1000", "10000"]);
+    bench.cols(["1", "10", "100"]); //, "1000", "10000"]);
 
     bench.runner(func(row, col) {
       let ?n = Nat.fromText(col);

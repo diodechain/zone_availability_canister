@@ -96,11 +96,11 @@ module DiodeMessages {
     WriteableBand.appendNat32(store.inbox, store.inbox_index);
     WriteableBand.appendNat32(store.inbox, timestamp);
     WriteableBand.appendBlob(store.inbox, key_id);
+    WriteableBand.appendNat32(store.inbox, 0); // next_msg_id is always 0 for a new message
     WriteableBand.appendNat32(store.inbox, switch (prev_entry) {
       case (null) { 0 };
       case (?value) { value.max_msg_id };
     });
-    WriteableBand.appendNat32(store.inbox, 0); // prev_msg_id is always 0 for a new message
     WriteableBand.appendBlob(store.inbox, hash);
     WriteableBand.appendNat64(store.inbox, before_offset);
     WriteableBand.appendNat32(store.inbox, Nat32.fromNat(ciphertext.size()));
@@ -113,7 +113,7 @@ module DiodeMessages {
       case (null) { };
       case (?value) {
         let prev_msg_offset = get_message_offset_by_id(store, value.max_msg_id);
-        Region.storeNat32(store.inbox.region, prev_msg_offset + 68, store.inbox_index);
+        Region.storeNat32(store.inbox.region, prev_msg_offset + 32, store.inbox_index);
       };
     };
 
