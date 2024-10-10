@@ -219,28 +219,10 @@ defmodule Test do
     <<byte_size(name), name::binary>>
   end
 
-  def query(canister_id, wallet, method, types \\ [], args \\ []) do
-    query = %{
-      "request_type" => "query",
-      "method_name" => method,
-      "arg" => cbor_bytes(Candid.encode_parameters(types, args))
-    }
-
-    {_request_id, query} = sign_query(canister_id, wallet, query)
-    %{"reply" => %{"arg" => ret}} = curl("#{host()}/api/v2/canister/#{canister_id}/query", query)
-
-    {ret, ""} = Candid.decode_parameters(ret.value)
-    ret
-  end
-
-  defp sign_query(canister_id, wallet, query) do
-    <<_crc32::binary-size(4), canister_bin_id::binary>> =
-      String.replace(canister_id, "-", "") |> Base.decode32!(case: :lower, padding: false)
-
+  defp sign_query(wallet, query) do
     query =
       Map.merge(query, %{
         "ingress_expiry" => System.os_time(:nanosecond) + 1000 * 1000 * 1000,
-        "canister_id" => cbor_bytes(canister_bin_id),
         "sender" => cbor_bytes(wallet_id(wallet))
       })
 
@@ -267,30 +249,46 @@ defmodule Test do
   def utf8_to_list(other), do: other
 
   def call(canister_id, wallet, method, types \\ [], args \\ []) do
-    query = %{
-      "request_type" => "call",
-      "method_name" => method,
-      "arg" => cbor_bytes(Candid.encode_parameters(types, args))
-    }
+    {request_id, query} =
+      sign_query(wallet, %{
+        "request_type" => "call",
+        "canister_id" => cbor_bytes(decode_textual(canister_id)),
+        "method_name" => method,
+        "arg" => cbor_bytes(Candid.encode_parameters(types, args))
+      })
 
-    {request_id, query} = sign_query(canister_id, wallet, query)
     ret = curl("#{host()}/api/v3/canister/#{canister_id}/call", query)
 
     if ret["status"] == "replied" do
-      read_state(canister_id, wallet, [])
-      # read_state(canister_id, wallet, [[{:utf8, "request_status"}, cbor_bytes(request_id), {:utf8, "reply"}]])
+      # read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
+      {:ok, %{value: value}, ""} = CBOR.decode(ret["certificate"].value)
+      value["tree"]
     else
       ret
     end
   end
 
-  def read_state(canister_id, wallet, paths) do
-    query = %{
-      "request_type" => "read_state",
-      "paths" => paths,
-    }
+  def query(canister_id, wallet, method, types \\ [], args \\ []) do
+    {_request_id, query} =
+      sign_query(wallet, %{
+        "request_type" => "query",
+        "canister_id" => cbor_bytes(decode_textual(canister_id)),
+        "method_name" => method,
+        "arg" => cbor_bytes(Candid.encode_parameters(types, args))
+      })
 
-    {_request_id, query} = sign_query(canister_id, wallet, query)
+    %{"reply" => %{"arg" => ret}} = curl("#{host()}/api/v2/canister/#{canister_id}/query", query)
+
+    {ret, ""} = Candid.decode_parameters(ret.value)
+    ret
+  end
+
+  def read_state(canister_id, wallet, paths) do
+    {_request_id, query} =
+      sign_query(wallet, %{
+        "request_type" => "read_state",
+        "paths" => paths
+      })
 
     %{"reply" => %{"arg" => ret}} =
       curl("#{host()}/api/v2/canister/#{canister_id}/read_state", query)
@@ -409,10 +407,7 @@ defmodule Test do
       """)
 
     reftext = "42gbo-uiwfn-oq452-ql6yp-4jsqn-a6bxk-n7l4z-ni7os-yptq6-3htob-vqe"
-
-    <<_crc32::binary-size(4), refbin::binary>> =
-      String.replace(reftext, "-", "")
-      |> Base.decode32!(case: :lower, padding: false)
+    refbin = decode_textual(reftext)
 
     IO.inspect(refbin, label: "refbin")
     idsize = byte_size(wallet_id(wallet))
@@ -453,11 +448,18 @@ defmodule Test do
     message = "hello world"
     hash = h(message)
     key_id = Wallet.address!(w)
-    [1] = call(canister_id, w, "add_message2", [:blob, :blob, :blob], [key_id, hash, message])
+    [1] = call(canister_id, w, "add_message", [:blob, :blob, :blob], [key_id, hash, message])
   end
 
   def cbor_bytes(data) do
     %CBOR.Tag{tag: :bytes, value: data}
+  end
+
+  def decode_textual(canister_id) do
+    <<_crc32::binary-size(4), canister_bin_id::binary>> =
+      String.replace(canister_id, "-", "") |> Base.decode32!(case: :lower, padding: false)
+
+    canister_bin_id
   end
 
   def benchmark(parallel \\ 1) do
