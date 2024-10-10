@@ -39,7 +39,7 @@ Only the Key ID Index is changed:
 
 | Index Name | Key | Value | Description |
 |------------|-----|-------|-------------|
-| Key ID Index | key_id (24 bytes) | (min message id, max message id, message count) | Maps the encryption key id to the highest and lowest message id in the inbox region encrypted with this key. |
+| Key ID Index | key_id (20 bytes) | (min message id, max message id, message count) | Maps the encryption key id to the highest and lowest message id in the inbox region encrypted with this key. |
 
 ### Data layout
 
@@ -56,7 +56,7 @@ growth beyond limits.
 | ----------- | ------- | ------------------------------------------------------------------- |
 | id          | uint32  | auto incremented integer and unique id of this message              |
 | timestamp   | uint32  | unix timestamp of the insertion into the canister                   |
-| key_id      | bytes24 | ethereum address hash of the destination key                        |
+| key_id      | bytes20 | ethereum address hash of the destination key                        |
 | next_id     | uint32  | id of the next message in the linked list for this key_id           |
 | prev_id     | uint32  | id of the previous message in the linked list for this key_id      |
 | hash        | bytes32 | sha256 hash of the cipher_text                                      |
@@ -71,7 +71,7 @@ erDiagram
     %% HEAP Maps
     KEY_INBOX_MAP ||--o{ INBOX : maps
     KEY_INBOX_MAP {
-        bytes24 key_id
+        bytes20 key_id
         uint32 min_msg_id
         uint32 max_msg_id
     }
@@ -86,7 +86,7 @@ erDiagram
     INBOX {
         uint32 message_id
         uint32 timestamp
-        bytes24 destination
+        bytes20 destination
         bytes32 hash
         uint32 next_msg_id
         uint32 prev_msg_id

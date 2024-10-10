@@ -65,8 +65,26 @@ defmodule Candid do
       raise "types and values must have the same length"
     end
 
-    definition_table = encode_list([], &encode_type/1)
-    argument_types = encode_list(types, &encode_type/1)
+    {typemap, definitions} =
+      Enum.reduce(types, {%{}, []}, fn type, {typemap, definition_table} ->
+        if Map.has_key?(typemap, type) do
+          {typemap, definition_table}
+        else
+          encoding = encode_type(type)
+
+          if byte_size(encoding) == 1 do
+            {Map.put(typemap, type, encoding), definition_table}
+          else
+            new_encoding = length(definition_table) |> LEB128.encode_signed()
+            definition_table = definition_table ++ [encoding]
+
+            {Map.put(typemap, type, new_encoding), definition_table}
+          end
+        end
+      end)
+
+    definition_table = encode_list(definitions, fn encoding -> encoding end)
+    argument_types = encode_list(types, fn type -> typemap[type] end)
 
     values =
       Enum.zip(types, values)
@@ -194,6 +212,7 @@ defmodule Test do
 
       System.at_exit(fn _ -> System.cmd("kill", ["#{pid}"]) end)
       await_service()
+      {_, 0} = System.cmd("dfx", ["deploy"])
     end
   end
 
@@ -262,11 +281,27 @@ defmodule Test do
     if ret["status"] == "replied" do
       # read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
       {:ok, %{value: value}, ""} = CBOR.decode(ret["certificate"].value)
-      value["tree"]
+      tree = flatten_tree(value["tree"])
+      tree["request_status"][request_id]["reply"]
     else
       ret
     end
   end
+
+  defp flatten_tree(tree) do
+    do_flatten_tree(tree)
+    |> mapify()
+    |> IO.inspect(label: "flatten_tree")
+  end
+
+  defp mapify(list) when is_list(list), do: Enum.map(list, &mapify/1) |> Map.new()
+  defp mapify({key, value}), do: {key, mapify(value)}
+  defp mapify(other), do: other
+
+  defp do_flatten_tree([1 | list]), do: Enum.map(list, &do_flatten_tree/1) |> Enum.reject(&is_nil/1) |> List.flatten()
+  defp do_flatten_tree([2, key, values]), do: {key.value, do_flatten_tree(values)}
+  defp do_flatten_tree([3, value]), do: value.value
+  defp do_flatten_tree([4, _sig]), do: nil
 
   def query(canister_id, wallet, method, types \\ [], args \\ []) do
     {_request_id, query} =
@@ -442,13 +477,19 @@ defmodule Test do
     IO.puts("wallet_textual: #{wallet_textual(w)}")
 
     canister_id = "bkyz2-fmaaa-aaaaa-qaaaq-cai"
-
     [1] = query(canister_id, w, "get_max_message_id")
 
     message = "hello world"
     hash = h(message)
     key_id = Wallet.address!(w)
-    [1] = call(canister_id, w, "add_message", [:blob, :blob, :blob], [key_id, hash, message])
+    _ = call(canister_id, w, "add_message", [:blob, :blob, :blob], [key_id, hash, message])
+    [2] = query(canister_id, w, "get_max_message_id")
+
+    message = "hello world2"
+    hash = h(message)
+    key_id = Wallet.address!(w)
+    _ = call(canister_id, w, "add_message", [:blob, :blob, :blob], [key_id, hash, message])
+    [3] = query(canister_id, w, "get_max_message_id")
   end
 
   def cbor_bytes(data) do

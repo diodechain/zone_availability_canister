@@ -4,7 +4,7 @@ This canister is used as availability guarantee for the Diode peer to peer messa
 
 ## Requirements
 
-On average the size of a diode message is 236 bytes. This includes meta messages for key rotation and discovery as well as real user input based messages. Including the cipher text of 180 bytes and 32 bytes for the hash and 24 bytes for the key id.
+On average the size of a diode message is 232 bytes. This includes meta messages for key rotation and discovery as well as real user input based messages. Including the cipher text of 180 bytes and 32 bytes for the hash and 20 bytes for the key id.
 
 - The canister should be able to store up to 1 million messages (236 mb)
 - The messages primary key should be a hash of the message, so that no message is duplicated
@@ -54,7 +54,7 @@ There are two primary indexes that need to be created:
 | Index Name | Key | Value | Description |
 |------------|-----|-------|-------------|
 | Hash Index | hash (32 bytes) | message id (4 bytes) | Maps the message hash to its location in the inbox region and its auto incremented id there |
-| Key ID Index | key_id (24 bytes) | (region, end_offset) | Maps the encryption key id to its corresponding key_inbox region and the offset at the end of the region. |
+| Key ID Index | key_id (20 bytes) | (region, end_offset) | Maps the encryption key id to its corresponding key_inbox region and the offset at the end of the region. |
 
 The hash index will be used to ensure that no message is duplicated in the system. It will allow for a direct access to a specific message in the inbox region. This is going to be the largest index as it needs to store the hash of every message. (1 million entries)
 
@@ -68,7 +68,7 @@ As there can be multiple regions and regions can be grown independently we will 
 - `key_inbox[key_id]` is a group of regions partitioning the `inbox` content by destination address.
 - `payload_region` will store the variable length message cipher text.
 
-To keep track of the number of `key_inboxes` and a mapping between their 24 byte `key_id` and the actual `key_inbox` region we will use a (StableHashMap)[https://github.com/canscale/StableHashMap].
+To keep track of the number of `key_inboxes` and a mapping between their 20 byte `key_id` and the actual `key_inbox` region we will use a (StableHashMap)[https://github.com/canscale/StableHashMap].
 
 
 ## Binary layout of `payload_region`
@@ -90,7 +90,7 @@ growth beyond limits.
 | ----------- | ------- | ------------------------------------------------------------------- |
 | id          | uint32  | auto incremented integer and unique id of this message              |
 | timestamp   | uint32  | unix timestamp of the insertion into the canister                   |
-| key_id      | bytes24 | ethereum address hash of the destination key                        |
+| key_id      | bytes20 | ethereum address hash of the destination key                        |
 | hash        | bytes32 | sha256 hash of the cipher_text                                      |
 | offset      | uint64  | offset of the message payload in the `payload_region`               |
 | len         | uint32  | length of the message payload in the `payload_region`               |
@@ -116,7 +116,7 @@ erDiagram
     %% HEAP Maps
     KEY_INBOX_MAP ||--o{ KEY_INBOX : maps
     KEY_INBOX_MAP {
-        bytes24 key_id
+        bytes20 key_id
         Region region
         uint64 end_offset
     }
@@ -136,7 +136,7 @@ erDiagram
     INBOX {
         uint32 id
         uint32 timestamp
-        bytes24 destination
+        bytes20 destination
         bytes32 hash
         uint64 offset
         uint32 len

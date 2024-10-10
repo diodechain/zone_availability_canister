@@ -41,7 +41,7 @@ module {
   };
 
   private func make_key(n : Nat) : Blob {
-    return make_blob(24, n);
+    return make_blob(20, n);
   };
 
   private func make_hash(n : Nat) : Blob {

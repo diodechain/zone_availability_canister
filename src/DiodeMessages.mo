@@ -1,5 +1,4 @@
 import { abs } = "mo:base/Int";
-import Iter "mo:base/Iter";
 import Result "mo:base/Result";
 import Nat64 "mo:base/Nat64";
 import Nat32 "mo:base/Nat32";
@@ -20,7 +19,7 @@ module DiodeMessages {
     ciphertext: Blob;
   };
 
-  let inbox_entry_size : Nat64 = 84;
+  let inbox_entry_size : Nat64 = 80;
 
 
   type KeyInboxEntry = {
@@ -49,8 +48,8 @@ module DiodeMessages {
 
 
   public func add_message(store: MessageStore, key_id: Blob, hash: Blob, ciphertext: Blob) : Result.Result<(), Text> {
-    if (key_id.size() != 24) {
-      return #err("key_id must be 24 bytes");
+    if (key_id.size() != 20) {
+      return #err("key_id must be 20 bytes");
     };
 
     if (Map.has<Blob, Nat32>(store.message_index, Map.bhash, hash)) {
@@ -113,7 +112,7 @@ module DiodeMessages {
       case (null) { };
       case (?value) {
         let prev_msg_offset = get_message_offset_by_id(store, value.max_msg_id);
-        Region.storeNat32(store.inbox.region, prev_msg_offset + 32, store.inbox_index);
+        Region.storeNat32(store.inbox.region, prev_msg_offset + 28, store.inbox_index);
       };
     };
 
@@ -151,12 +150,12 @@ module DiodeMessages {
   private func get_message_by_offset(store: MessageStore, offset: Nat64) : Message {
     let id = Region.loadNat32(store.inbox.region, offset);
     let timestamp = Region.loadNat32(store.inbox.region, offset + 4);
-    let key_id = Region.loadBlob(store.inbox.region, offset + 8, 24);
-    let next_msg_id = Region.loadNat32(store.inbox.region, offset + 32);
-    let prev_msg_id = Region.loadNat32(store.inbox.region, offset + 36);
-    let hash = Region.loadBlob(store.inbox.region, offset + 40, 32);
-    let payload_offset = Region.loadNat64(store.inbox.region, offset + 72);
-    let payload_size = Region.loadNat32(store.inbox.region, offset + 80);
+    let key_id = Region.loadBlob(store.inbox.region, offset + 8, 20);
+    let next_msg_id = Region.loadNat32(store.inbox.region, offset + 28);
+    let prev_msg_id = Region.loadNat32(store.inbox.region, offset + 32);
+    let hash = Region.loadBlob(store.inbox.region, offset + 36, 32);
+    let payload_offset = Region.loadNat64(store.inbox.region, offset + 68);
+    let payload_size = Region.loadNat32(store.inbox.region, offset + 76);
     let ciphertext = Region.loadBlob(store.payloads.region, payload_offset, Nat32.toNat(payload_size));
 
     return {
