@@ -1,5 +1,6 @@
 #!/usr/bin/env elixir
 Mix.install([
+  {:leb128, "~> 1.0"},
   {:diode_client, "~> 1.0"},
   {:cbor, "~> 1.0"},
   {:jason, "~> 1.4"},
@@ -11,90 +12,156 @@ Mix.install([
 defmodule Candid do
   # https://github.com/dfinity/candid/blob/master/spec/Candid.md#core-grammar
 
-  def decode("DIDL" <> term) do
-    term
+  def decode_parameters("DIDL" <> term) do
+    {_definition_table, rest} = decode_list(term)
+    {argument_types, rest} = decode_list(rest)
+    decode_arguments(argument_types, rest)
   end
 
-  def encode(term) do
-    ret = "DIDL" <> do_encode(term)
-    IO.inspect({term, ret}, label: "encode")
-    ret
+  defp decode_list(term) do
+    {len, rest} = LEB128.decode_unsigned!(term)
+    decode_list_items(len, rest, [])
   end
 
-  def do_encode(list) when is_list(list) do
+  defp decode_list_items(0, rest, acc) do
+    {acc, rest}
+  end
+
+  defp decode_list_items(n, rest, acc) do
+    {item, rest} = decode(rest)
+    decode_list_items(n - 1, rest, acc ++ [item])
+  end
+
+  defp decode_arguments([type | types], rest) do
+    {value, rest} = decode_type(type, rest)
+    {values, rest} = decode_arguments(types, rest)
+    {[value | values], rest}
+  end
+
+  defp decode_arguments([], rest) do
+    {[], rest}
+  end
+
+  def decode_type(:nat32, <<value::unsigned-little-size(32), rest::binary>>), do: {value, rest}
+  def decode_type(:int32, <<value::signed-little-size(32), rest::binary>>), do: {value, rest}
+  def decode_type(:nat64, <<value::unsigned-little-size(64), rest::binary>>), do: {value, rest}
+  def decode_type(:int64, <<value::signed-little-size(64), rest::binary>>), do: {value, rest}
+  def decode_type(:nat8, <<value::unsigned-little-size(8), rest::binary>>), do: {value, rest}
+  def decode_type(:int8, <<value::signed-little-size(8), rest::binary>>), do: {value, rest}
+  def decode_type(:nat16, <<value::unsigned-little-size(16), rest::binary>>), do: {value, rest}
+  def decode_type(:int16, <<value::signed-little-size(16), rest::binary>>), do: {value, rest}
+  def decode_type(:nat32, <<value::unsigned-little-size(32), rest::binary>>), do: {value, rest}
+  def decode_type(:int32, <<value::signed-little-size(32), rest::binary>>), do: {value, rest}
+  def decode_type(:nat, rest), do: LEB128.decode_unsigned!(rest)
+  def decode_type(:int, rest), do: LEB128.decode_unsigned!(rest)
+
+  def decode_type(type, rest) do
+    # https://github.com/dfinity/candid/blob/master/spec/Candid.md#core-grammar
+    raise "unimplemented type: #{inspect({type, rest})}"
+  end
+
+  def encode_parameters(types, values) do
+    if length(types) != length(values) do
+      raise "types and values must have the same length"
+    end
+
+    definition_table = encode_list([], &encode_type/1)
+    argument_types = encode_list(types, &encode_type/1)
+
+    values =
+      Enum.zip(types, values)
+      |> Enum.map(fn {type, value} -> encode_type_value(type, value) end)
+      |> Enum.join("")
+
+    "DIDL" <> definition_table <> argument_types <> values
+  end
+
+  def encode_list(list, fun) when is_list(list) do
     len = length(list)
-    leb128(len) <> Enum.join(Enum.map(list, &do_encode/1), "")
+    LEB128.encode_unsigned(len) <> Enum.join(Enum.map(list, fun), "")
   end
 
-  def do_encode(:null), do: sleb128(-1)
-  def do_encode(:bool), do: sleb128(-2)
-  def do_encode(:nat), do: sleb128(-3)
-  def do_encode(:int), do: sleb128(-4)
-  def do_encode(:nat8), do: sleb128(-5)
-  def do_encode(:nat16), do: sleb128(-6)
-  def do_encode(:nat32), do: sleb128(-7)
-  def do_encode(:nat64), do: sleb128(-8)
-  def do_encode(:int8), do: sleb128(-9)
-  def do_encode(:int16), do: sleb128(-10)
-  def do_encode(:int32), do: sleb128(-11)
-  def do_encode(:int64), do: sleb128(-12)
-  def do_encode(:float32), do: sleb128(-13)
-  def do_encode(:float64), do: sleb128(-14)
-  def do_encode(:text), do: sleb128(-15)
-  def do_encode(:reserved), do: sleb128(-16)
-  def do_encode(:empty), do: sleb128(-17)
-  def do_encode(:principal), do: sleb128(-24)
+  def encode_type_value(:null, _), do: ""
 
-  def leb128(number) do
-    # https://en.wikipedia.org/wiki/LEB128#Unsigned_LEB128
-    bits = for <<bit::size(1) <- :binary.encode_unsigned(number)>>, do: bit
+  def encode_type_value(:bool, bool),
+    do:
+      (if bool do
+         <<1>>
+       else
+         <<0>>
+       end)
 
-    bits =
-      case Enum.drop_while(bits, &(&1 == 0)) do
-        [] -> [0]
-        rest -> rest
-      end
+  def encode_type_value(:nat, nat), do: LEB128.encode_unsigned(nat)
+  def encode_type_value(:int, int), do: LEB128.encode_signed(int)
+  def encode_type_value(:nat8, nat8), do: <<nat8>>
+  def encode_type_value(:nat16, nat16), do: <<nat16::unsigned-little-size(16)>>
+  def encode_type_value(:nat32, nat32), do: <<nat32::unsigned-little-size(32)>>
+  def encode_type_value(:nat64, nat64), do: <<nat64::unsigned-little-size(64)>>
+  def encode_type_value(:int8, int8), do: <<int8>>
+  def encode_type_value(:int16, int16), do: <<int16::signed-little-size(16)>>
+  def encode_type_value(:int32, int32), do: <<int32::signed-little-size(32)>>
+  def encode_type_value(:int64, int64), do: <<int64::signed-little-size(64)>>
+  def encode_type_value(:float32, float32), do: <<float32::signed-little-size(32)>>
+  def encode_type_value(:float64, float64), do: <<float64::signed-little-size(64)>>
+  def encode_type_value(:text, text), do: text
+  def encode_type_value(:reserved, _), do: ""
+  # def encode_type_value(:empty, _), do: ""
+  # def encode_type_value(:principal, principal), do: principal
+  def encode_type_value({:vec, :nat8}, binary) when is_binary(binary),
+    do: LEB128.encode_unsigned(byte_size(binary)) <> binary
 
-    do_leb128(bits, false)
+  def encode_type_value({:vec, type}, values),
+    do: encode_list(values, &encode_type_value(type, &1))
+
+  def encode_type_value(:blob, values), do: encode_type_value({:vec, :nat8}, values)
+  def encode_type_value({:opt, _type}, nil), do: <<0>>
+  def encode_type_value({:opt, type}, value), do: <<1>> <> encode_type_value(type, value)
+
+  def encode_type(:null), do: LEB128.encode_signed(-1)
+  def encode_type(:bool), do: LEB128.encode_signed(-2)
+  def encode_type(:nat), do: LEB128.encode_signed(-3)
+  def encode_type(:int), do: LEB128.encode_signed(-4)
+  def encode_type(:nat8), do: LEB128.encode_signed(-5)
+  def encode_type(:nat16), do: LEB128.encode_signed(-6)
+  def encode_type(:nat32), do: LEB128.encode_signed(-7)
+  def encode_type(:nat64), do: LEB128.encode_signed(-8)
+  def encode_type(:int8), do: LEB128.encode_signed(-9)
+  def encode_type(:int16), do: LEB128.encode_signed(-10)
+  def encode_type(:int32), do: LEB128.encode_signed(-11)
+  def encode_type(:int64), do: LEB128.encode_signed(-12)
+  def encode_type(:float32), do: LEB128.encode_signed(-13)
+  def encode_type(:float64), do: LEB128.encode_signed(-14)
+  def encode_type(:text), do: LEB128.encode_signed(-15)
+  def encode_type(:reserved), do: LEB128.encode_signed(-16)
+  def encode_type(:empty), do: LEB128.encode_signed(-17)
+  def encode_type(:principal), do: LEB128.encode_signed(-24)
+  def encode_type({:opt, type}), do: LEB128.encode_signed(-18) <> encode_type(type)
+  def encode_type({:vec, type}), do: LEB128.encode_signed(-19) <> encode_type(type)
+  def encode_type(:blob), do: encode_type({:vec, :nat8})
+
+  def decode(term) do
+    {value, rest} = LEB128.decode_signed!(term)
+    {do_decode(value), rest}
   end
 
-  def sleb128(number) do
-    # https://en.wikipedia.org/wiki/LEB128#Unsigned_LEB128
-    is_signed = number < 0
-    number = abs(number)
-    bits = for <<bit::size(1) <- :binary.encode_unsigned(number)>>, do: bit
-    bits = [0 | Enum.drop_while(bits, &(&1 == 0))]
-    do_leb128(bits, is_signed)
-  end
-
-  defp do_leb128(bits, is_signed) do
-    len = length(bits)
-    missing = ceil(len / 7) * 7 - len
-    padded = List.duplicate(0, missing) ++ bits
-
-    padded =
-      if is_signed do
-        len = length(padded)
-        padded = Enum.map(padded, fn bit -> if bit == 0, do: 1, else: 0 end)
-
-        <<num::unsigned-size(len)>> =
-          Enum.reduce(padded, "", fn bit, acc -> <<acc::bitstring, bit::size(1)>> end)
-
-        for <<(bit::size(1) <- <<num + 1::unsigned-size(len)>>)>>, do: bit
-      else
-        padded
-      end
-
-    Enum.chunk_every(padded, 7)
-    |> Enum.with_index()
-    |> Enum.map(fn {chunk, index} ->
-      marker = if index == 0, do: <<0::size(1)>>, else: <<1::size(1)>>
-      [marker | Enum.map(chunk, &<<&1::size(1)>>)]
-    end)
-    |> Enum.reverse()
-    |> List.flatten()
-    |> Enum.reduce("", fn bit, acc -> <<acc::bitstring, bit::bitstring>> end)
-  end
+  def do_decode(-1), do: :null
+  def do_decode(-2), do: :bool
+  def do_decode(-3), do: :nat
+  def do_decode(-4), do: :int
+  def do_decode(-5), do: :nat8
+  def do_decode(-6), do: :nat16
+  def do_decode(-7), do: :nat32
+  def do_decode(-8), do: :nat64
+  def do_decode(-9), do: :int8
+  def do_decode(-10), do: :int16
+  def do_decode(-11), do: :int32
+  def do_decode(-12), do: :int64
+  def do_decode(-13), do: :float32
+  def do_decode(-14), do: :float64
+  def do_decode(-15), do: :text
+  def do_decode(-16), do: :reserved
+  def do_decode(-17), do: :empty
+  def do_decode(-24), do: :principal
 end
 
 defmodule Test do
@@ -152,17 +219,84 @@ defmodule Test do
     <<byte_size(name), name::binary>>
   end
 
-  def query(canister, wallet, query) do
+  def query(canister_id, wallet, method, types \\ [], args \\ []) do
+    query = %{
+      "request_type" => "query",
+      "method_name" => method,
+      "arg" => cbor_bytes(Candid.encode_parameters(types, args))
+    }
+
+    {_request_id, query} = sign_query(canister_id, wallet, query)
+    %{"reply" => %{"arg" => ret}} = curl("#{host()}/api/v2/canister/#{canister_id}/query", query)
+
+    {ret, ""} = Candid.decode_parameters(ret.value)
+    ret
+  end
+
+  defp sign_query(canister_id, wallet, query) do
+    <<_crc32::binary-size(4), canister_bin_id::binary>> =
+      String.replace(canister_id, "-", "") |> Base.decode32!(case: :lower, padding: false)
+
+    query =
+      Map.merge(query, %{
+        "ingress_expiry" => System.os_time(:nanosecond) + 1000 * 1000 * 1000,
+        "canister_id" => cbor_bytes(canister_bin_id),
+        "sender" => cbor_bytes(wallet_id(wallet))
+      })
+
     request_id = hash_of_map(query)
     sig = wallet_sign(wallet, domain_separator("ic-request") <> request_id)
 
+    {request_id,
+     %{
+       "content" => utf8_to_list(query),
+       "sender_pubkey" => cbor_bytes(wallet_der(wallet)),
+       "sender_sig" => cbor_bytes(sig)
+     }}
+  end
+
+  def utf8_to_list(map) when is_map(map) and not is_struct(map) do
+    Enum.map(map, fn {key, value} -> {key, utf8_to_list(value)} end) |> Map.new()
+  end
+
+  def utf8_to_list(list) when is_list(list) do
+    Enum.map(list, &utf8_to_list/1)
+  end
+
+  def utf8_to_list({:utf8, binary}) when is_binary(binary), do: binary
+  def utf8_to_list(other), do: other
+
+  def call(canister_id, wallet, method, types \\ [], args \\ []) do
     query = %{
-      "content" => query,
-      "sender_pubkey" => cbor_bytes(wallet_der(wallet)),
-      "sender_sig" => cbor_bytes(sig)
+      "request_type" => "call",
+      "method_name" => method,
+      "arg" => cbor_bytes(Candid.encode_parameters(types, args))
     }
 
-    curl("#{host()}/api/v2/canister/#{canister}/query", query)
+    {request_id, query} = sign_query(canister_id, wallet, query)
+    ret = curl("#{host()}/api/v3/canister/#{canister_id}/call", query)
+
+    if ret["status"] == "replied" do
+      read_state(canister_id, wallet, [])
+      # read_state(canister_id, wallet, [[{:utf8, "request_status"}, cbor_bytes(request_id), {:utf8, "reply"}]])
+    else
+      ret
+    end
+  end
+
+  def read_state(canister_id, wallet, paths) do
+    query = %{
+      "request_type" => "read_state",
+      "paths" => paths,
+    }
+
+    {_request_id, query} = sign_query(canister_id, wallet, query)
+
+    %{"reply" => %{"arg" => ret}} =
+      curl("#{host()}/api/v2/canister/#{canister_id}/read_state", query)
+
+    {ret, ""} = Candid.decode_parameters(ret.value)
+    ret
   end
 
   defp curl(host, opayload, method \\ :post, headers \\ []) do
@@ -200,8 +334,11 @@ defmodule Test do
     :persistent_term.get(:print_requests?, true)
   end
 
-  def h(number) when is_integer(number), do: h(Candid.leb128(number))
+  def h([]), do: :crypto.hash(:sha256, "")
+  def h(list) when is_list(list), do: :crypto.hash(:sha256, Enum.join(Enum.map(list, &h/1), ""))
+  def h(number) when is_integer(number), do: h(LEB128.encode_unsigned(number))
   def h(%CBOR.Tag{tag: :bytes, value: data}), do: h(data)
+  def h({:utf8, data}) when is_binary(data), do: h(data)
   def h(data) when is_binary(data), do: :crypto.hash(:sha256, data)
 
   # https://internetcomputer.org/docs/current/references/ic-interface-spec#request-id
@@ -283,10 +420,6 @@ defmodule Test do
     ^refbin = IO.inspect(wallet_id(wallet), label: "wallet_id")
     ^reftext = IO.inspect(wallet_textual(wallet), label: "wallet_textual")
 
-    <<0xE5, 0x8E, 0x26>> = Candid.leb128(624_485)
-    <<0xC0, 0xBB, 0x78>> = Candid.sleb128(-123_456)
-    <<0x7F>> = Candid.sleb128(-1)
-
     "0xdb8e57abc8cda1525d45fdd2637af091bc1f28b35819a40df71517d1501f2c76" =
       h(1_685_570_400_000_000_000) |> DiodeClient.Base16.encode()
 
@@ -315,21 +448,12 @@ defmodule Test do
 
     canister_id = "bkyz2-fmaaa-aaaaa-qaaaq-cai"
 
-    <<_crc32::binary-size(4), canister_bin_id::binary>> =
-      String.replace(canister_id, "-", "") |> Base.decode32!(case: :lower, padding: false)
+    [1] = query(canister_id, w, "get_max_message_id")
 
-    %{"reply" => %{"arg" => ret}} =
-      query(canister_id, w, %{
-        "request_type" => "query",
-        "canister_id" => cbor_bytes(canister_bin_id),
-        "method_name" => "get_max_message_id",
-        # "arg" => cbor_bytes(Candid.encode([])),
-        "arg" => cbor_bytes("DIDL\x00\x00"),
-        "sender" => cbor_bytes(wallet_id(w)),
-        "ingress_expiry" => System.os_time(:nanosecond) + 1000 * 1000 * 1000
-      })
-
-      0 = Candid.decode(ret.value)
+    message = "hello world"
+    hash = h(message)
+    key_id = Wallet.address!(w)
+    [1] = call(canister_id, w, "add_message2", [:blob, :blob, :blob], [key_id, hash, message])
   end
 
   def cbor_bytes(data) do

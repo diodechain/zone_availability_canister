@@ -5,7 +5,7 @@ import DiodeMessages "./DiodeMessages";
 actor {
   stable var dm: DiodeMessages.MessageStore = DiodeMessages.new();
 
-  public func add_message(key_id: Blob, hash: Blob, ciphertext: Blob) : async Result.Result<(), Text> {
+  public shared func add_message(key_id: Blob, hash: Blob, ciphertext: Blob) : async Result.Result<(), Text> {
     DiodeMessages.add_message(dm, key_id, hash, ciphertext);
   };
 
