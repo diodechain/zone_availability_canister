@@ -177,7 +177,7 @@ module DiodeMessages {
   };
 
   public func get_max_message_id(store: MessageStore) : Nat32 {
-    return store.inbox_index;
+    return store.inbox_index - 1;
   };
 
   public func get_min_message_id_by_key(store: MessageStore, key_id: Blob) : ?Nat32 {

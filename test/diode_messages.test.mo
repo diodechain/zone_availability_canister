@@ -18,6 +18,10 @@ actor {
       });
 
       await test("Should add one message to inbox", func() : async () {
+        assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == null;
+        assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == null;
+        assert (DiodeMessages.get_max_message_id(dm)) == 0;
+
         assert isOk(DiodeMessages.add_message(dm, make_key(1), make_hash(1), "cipertext 1"));
 
         let message1 = DiodeMessages.get_message_by_id(dm, 1);
@@ -31,6 +35,7 @@ actor {
 
         assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?1;
         assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?1;
+        assert (DiodeMessages.get_max_message_id(dm)) == 1;
 
         assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(2))) == null;
         assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(2))) == null;

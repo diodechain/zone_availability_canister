@@ -13,27 +13,34 @@ defmodule Candid do
   # https://github.com/dfinity/candid/blob/master/spec/Candid.md#core-grammar
 
   def decode_parameters("DIDL" <> term) do
-    {_definition_table, rest} = decode_list(term)
-    {argument_types, rest} = decode_list(rest)
+    {definition_table, rest} = decode_list(term, &decode_type/1) |> IO.inspect(label: "definition_table")
+    {argument_types, rest} = decode_list(rest, &decode_type/1) |> IO.inspect(label: "argument_types")
+
+    argument_types =
+      Enum.map(argument_types, fn
+        {:comptype, n} -> Enum.at(definition_table, n)
+        type -> type
+      end)
+
     decode_arguments(argument_types, rest)
   end
 
-  defp decode_list(term) do
+  defp decode_list(term, fun) do
     {len, rest} = LEB128.decode_unsigned!(term)
-    decode_list_items(len, rest, [])
+    decode_list_items(len, rest, fun, [])
   end
 
-  defp decode_list_items(0, rest, acc) do
+  defp decode_list_items(0, rest, _fun, acc) do
     {acc, rest}
   end
 
-  defp decode_list_items(n, rest, acc) do
-    {item, rest} = decode(rest)
-    decode_list_items(n - 1, rest, acc ++ [item])
+  defp decode_list_items(n, rest, fun, acc) do
+    {item, rest} = fun.(rest)
+    decode_list_items(n - 1, rest, fun, acc ++ [item])
   end
 
   defp decode_arguments([type | types], rest) do
-    {value, rest} = decode_type(type, rest)
+    {value, rest} = decode_type_value(type, rest)
     {values, rest} = decode_arguments(types, rest)
     {[value | values], rest}
   end
@@ -42,20 +49,69 @@ defmodule Candid do
     {[], rest}
   end
 
-  def decode_type(:nat32, <<value::unsigned-little-size(32), rest::binary>>), do: {value, rest}
-  def decode_type(:int32, <<value::signed-little-size(32), rest::binary>>), do: {value, rest}
-  def decode_type(:nat64, <<value::unsigned-little-size(64), rest::binary>>), do: {value, rest}
-  def decode_type(:int64, <<value::signed-little-size(64), rest::binary>>), do: {value, rest}
-  def decode_type(:nat8, <<value::unsigned-little-size(8), rest::binary>>), do: {value, rest}
-  def decode_type(:int8, <<value::signed-little-size(8), rest::binary>>), do: {value, rest}
-  def decode_type(:nat16, <<value::unsigned-little-size(16), rest::binary>>), do: {value, rest}
-  def decode_type(:int16, <<value::signed-little-size(16), rest::binary>>), do: {value, rest}
-  def decode_type(:nat32, <<value::unsigned-little-size(32), rest::binary>>), do: {value, rest}
-  def decode_type(:int32, <<value::signed-little-size(32), rest::binary>>), do: {value, rest}
-  def decode_type(:nat, rest), do: LEB128.decode_unsigned!(rest)
-  def decode_type(:int, rest), do: LEB128.decode_unsigned!(rest)
+  def decode_type_value(:nat32, <<value::unsigned-little-size(32), rest::binary>>),
+    do: {value, rest}
 
-  def decode_type(type, rest) do
+  def decode_type_value(:int32, <<value::signed-little-size(32), rest::binary>>),
+    do: {value, rest}
+
+  def decode_type_value(:nat64, <<value::unsigned-little-size(64), rest::binary>>),
+    do: {value, rest}
+
+  def decode_type_value(:int64, <<value::signed-little-size(64), rest::binary>>),
+    do: {value, rest}
+
+  def decode_type_value(:nat8, <<value::unsigned-little-size(8), rest::binary>>),
+    do: {value, rest}
+
+  def decode_type_value(:int8, <<value::signed-little-size(8), rest::binary>>), do: {value, rest}
+
+  def decode_type_value(:nat16, <<value::unsigned-little-size(16), rest::binary>>),
+    do: {value, rest}
+
+  def decode_type_value(:int16, <<value::signed-little-size(16), rest::binary>>),
+    do: {value, rest}
+
+  def decode_type_value(:nat32, <<value::unsigned-little-size(32), rest::binary>>),
+    do: {value, rest}
+
+  def decode_type_value(:int32, <<value::signed-little-size(32), rest::binary>>),
+    do: {value, rest}
+
+  def decode_type_value(:nat, rest), do: LEB128.decode_unsigned!(rest)
+  def decode_type_value(:int, rest), do: LEB128.decode_unsigned!(rest)
+  def decode_type_value(:null, rest), do: {nil, rest}
+
+  def decode_type_value({:variant, types}, rest) do
+    {idx, rest} = LEB128.decode_unsigned!(rest)
+    {name, type} = Enum.at(types, idx)
+    {value, rest} = decode_type_value(type, rest)
+    {{name, value}, rest}
+  end
+
+  def decode_type_value({:record, types}, rest) do
+    Enum.reduce(types, {[], rest}, fn {name, type}, {acc, rest} ->
+      {value, rest} = decode_type_value(type, rest)
+      if name < 256 do
+        {[value | acc], rest}
+      else
+        {[{name, value} | acc], rest}
+      end
+    end)
+    |> then(fn {values, rest} -> {Enum.reverse(values), rest} end)
+  end
+
+  def decode_type_value({:vec, :nat8}, rest) do
+    {len, rest} = LEB128.decode_unsigned!(rest)
+    <<binary::binary-size(len), rest::binary>> = rest
+    {binary, rest}
+  end
+
+  def decode_type_value({:vec, subtype}, rest) do
+    decode_list(rest, &decode_type_value(subtype, &1))
+  end
+
+  def decode_type_value(type, rest) do
     # https://github.com/dfinity/candid/blob/master/spec/Candid.md#core-grammar
     raise "unimplemented type: #{inspect({type, rest})}"
   end
@@ -86,12 +142,14 @@ defmodule Candid do
     definition_table = encode_list(definitions, fn encoding -> encoding end)
     argument_types = encode_list(types, fn type -> typemap[type] end)
 
-    values =
+    binvalues =
       Enum.zip(types, values)
       |> Enum.map(fn {type, value} -> encode_type_value(type, value) end)
       |> Enum.join("")
 
-    "DIDL" <> definition_table <> argument_types <> values
+    result = "DIDL" <> definition_table <> argument_types <> binvalues
+    {^values, ""} = decode_parameters(result) |> IO.inspect(label: "re-decoded")
+    result
   end
 
   def encode_list(list, fun) when is_list(list) do
@@ -135,6 +193,21 @@ defmodule Candid do
   def encode_type_value({:opt, _type}, nil), do: <<0>>
   def encode_type_value({:opt, type}, value), do: <<1>> <> encode_type_value(type, value)
 
+  def encode_type_value({:record, types}, values) do
+    values =
+      if is_tuple(values) do
+        Tuple.to_list(values)
+      else
+        values
+      end
+
+    List.zip([types, values])
+    |> Enum.map(fn {{tag, type}, value} ->
+      LEB128.encode_unsigned(tag) <> encode_type_value(type, value)
+    end)
+    |> Enum.join("")
+  end
+
   def encode_type(:null), do: LEB128.encode_signed(-1)
   def encode_type(:bool), do: LEB128.encode_signed(-2)
   def encode_type(:nat), do: LEB128.encode_signed(-3)
@@ -157,29 +230,59 @@ defmodule Candid do
   def encode_type({:vec, type}), do: LEB128.encode_signed(-19) <> encode_type(type)
   def encode_type(:blob), do: encode_type({:vec, :nat8})
 
-  def decode(term) do
-    {value, rest} = LEB128.decode_signed!(term)
-    {do_decode(value), rest}
+  def encode_type({:record, types}) do
+    LEB128.encode_signed(-20) <> encode_list(types, &encode_fieldtype/1)
   end
 
-  def do_decode(-1), do: :null
-  def do_decode(-2), do: :bool
-  def do_decode(-3), do: :nat
-  def do_decode(-4), do: :int
-  def do_decode(-5), do: :nat8
-  def do_decode(-6), do: :nat16
-  def do_decode(-7), do: :nat32
-  def do_decode(-8), do: :nat64
-  def do_decode(-9), do: :int8
-  def do_decode(-10), do: :int16
-  def do_decode(-11), do: :int32
-  def do_decode(-12), do: :int64
-  def do_decode(-13), do: :float32
-  def do_decode(-14), do: :float64
-  def do_decode(-15), do: :text
-  def do_decode(-16), do: :reserved
-  def do_decode(-17), do: :empty
-  def do_decode(-24), do: :principal
+  def encode_fieldtype({tag, type}) do
+    LEB128.encode_unsigned(tag) <> encode_type(type)
+  end
+
+  def decode_type(term) when is_binary(term) do
+    decode_type(LEB128.decode_signed!(term))
+  end
+
+  def decode_type({-1, rest}), do: {:null, rest}
+  def decode_type({-2, rest}), do: {:bool, rest}
+  def decode_type({-3, rest}), do: {:nat, rest}
+  def decode_type({-4, rest}), do: {:int, rest}
+  def decode_type({-5, rest}), do: {:nat8, rest}
+  def decode_type({-6, rest}), do: {:nat16, rest}
+  def decode_type({-7, rest}), do: {:nat32, rest}
+  def decode_type({-8, rest}), do: {:nat64, rest}
+  def decode_type({-9, rest}), do: {:int8, rest}
+  def decode_type({-10, rest}), do: {:int16, rest}
+  def decode_type({-11, rest}), do: {:int32, rest}
+  def decode_type({-12, rest}), do: {:int64, rest}
+  def decode_type({-13, rest}), do: {:float32, rest}
+  def decode_type({-14, rest}), do: {:float64, rest}
+  def decode_type({-15, rest}), do: {:text, rest}
+  def decode_type({-16, rest}), do: {:reserved, rest}
+  def decode_type({-17, rest}), do: {:empty, rest}
+
+  def decode_type({-19, rest}) do
+    {subtype, rest} = decode_type(rest)
+    {{:vec, subtype}, rest}
+  end
+
+  def decode_type({-20, rest}) do
+    {subtypes, rest} = decode_list(rest, &decode_fieldtype/1)
+    {{:record, subtypes}, rest}
+  end
+
+  def decode_type({-21, rest}) do
+    {subtypes, rest} = decode_list(rest, &decode_fieldtype/1)
+    {{:variant, subtypes}, rest}
+  end
+
+  def decode_type({-24, rest}), do: {:principal, rest}
+  def decode_type({n, rest}) when n >= 0, do: {{:comptype, n}, rest}
+
+  def decode_fieldtype(rest) do
+    {n, rest} = LEB128.decode_unsigned!(rest)
+    {type, rest} = decode_type(rest)
+    {{n, type}, rest}
+  end
 end
 
 defmodule Test do
@@ -282,7 +385,15 @@ defmodule Test do
       # read_state(canister_id, wallet, [["request_status", cbor_bytes(request_id), "reply"]])
       {:ok, %{value: value}, ""} = CBOR.decode(ret["certificate"].value)
       tree = flatten_tree(value["tree"])
-      tree["request_status"][request_id]["reply"]
+
+      reply = tree["request_status"][request_id]["reply"]
+
+      if reply != nil do
+        {decoded, ""} = Candid.decode_parameters(reply)
+        decoded
+      else
+        tree
+      end
     else
       ret
     end
@@ -290,15 +401,17 @@ defmodule Test do
 
   defp flatten_tree(tree) do
     do_flatten_tree(tree)
+    |> List.wrap()
     |> mapify()
-    |> IO.inspect(label: "flatten_tree")
   end
 
   defp mapify(list) when is_list(list), do: Enum.map(list, &mapify/1) |> Map.new()
   defp mapify({key, value}), do: {key, mapify(value)}
   defp mapify(other), do: other
 
-  defp do_flatten_tree([1 | list]), do: Enum.map(list, &do_flatten_tree/1) |> Enum.reject(&is_nil/1) |> List.flatten()
+  defp do_flatten_tree([1 | list]),
+    do: Enum.map(list, &do_flatten_tree/1) |> Enum.reject(&is_nil/1) |> List.flatten()
+
   defp do_flatten_tree([2, key, values]), do: {key.value, do_flatten_tree(values)}
   defp do_flatten_tree([3, value]), do: value.value
   defp do_flatten_tree([4, _sig]), do: nil
@@ -333,6 +446,7 @@ defmodule Test do
   end
 
   defp curl(host, opayload, method \\ :post, headers \\ []) do
+    now = System.os_time(:millisecond)
     payload = CBOR.encode(opayload)
     {:ok, _decoded, ""} = CBOR.decode(payload)
 
@@ -345,19 +459,24 @@ defmodule Test do
       )
       |> Finch.request(TestFinch)
 
+    p1 = System.os_time(:millisecond)
+
     if print_requests?() do
       IO.puts("")
       IO.puts("POST #{String.replace_prefix(host, host(), "")}")
 
-      if method == :post do
-        IO.puts(">> #{inspect(opayload)}")
-      end
+      # if method == :post do
+      #   IO.puts(">> #{inspect(opayload)}")
+      # end
     end
 
     {:ok, tag, ""} = CBOR.decode(ret.body)
 
+    p2 = System.os_time(:millisecond)
+
     if print_requests?() do
-      IO.puts("<< #{inspect(tag.value)}")
+      # IO.puts("<< #{inspect(tag.value)}")
+      IO.puts("POST latency: #{p2 - now}ms http: #{p1 - now}ms")
     end
 
     tag.value
@@ -410,7 +529,6 @@ defmodule Test do
 
   def wallet_der(wallet) do
     public = Wallet.pubkey_long!(wallet)
-    # IO.inspect(public, label: "public")
 
     term =
       {:OTPSubjectPublicKeyInfo,
@@ -431,7 +549,26 @@ defmodule Test do
     wallet
   end
 
+  def namehash(name) do
+    # hash(id) = ( Sum_(i=0..k) utf8(id)[i] * 223^(k-i) ) mod 2^32 where k = |utf8(id)|-1
+    name
+    |> String.to_charlist()
+    |> Enum.with_index()
+    |> Enum.reduce(0, fn {char, i}, acc ->
+      (acc + char * :math.pow(223, byte_size(name) - i - 1))
+      |> trunc()
+      |> :erlang.band(2_147_483_647)
+    end)
+  end
+
   def run() do
+    {decoded, ""} =
+      <<68, 73, 68, 76, 1, 107, 2, 156, 194, 1, 127, 229, 142, 180, 2, 113, 1, 0, 0>>
+      |> Candid.decode_parameters()
+      |> IO.inspect(label: "decode_parameters")
+
+    ^decoded = [{namehash("ok"), nil}]
+
     wallet =
       wallet_from_pem("""
       -----BEGIN EC PRIVATE KEY-----
@@ -444,10 +581,9 @@ defmodule Test do
     reftext = "42gbo-uiwfn-oq452-ql6yp-4jsqn-a6bxk-n7l4z-ni7os-yptq6-3htob-vqe"
     refbin = decode_textual(reftext)
 
-    IO.inspect(refbin, label: "refbin")
     idsize = byte_size(wallet_id(wallet))
     ^idsize = byte_size(refbin)
-    ^refbin = IO.inspect(wallet_id(wallet), label: "wallet_id")
+    ^refbin = wallet_id(wallet)
     ^reftext = IO.inspect(wallet_textual(wallet), label: "wallet_textual")
 
     "0xdb8e57abc8cda1525d45fdd2637af091bc1f28b35819a40df71517d1501f2c76" =
@@ -477,20 +613,39 @@ defmodule Test do
     IO.puts("wallet_textual: #{wallet_textual(w)}")
 
     canister_id = "bkyz2-fmaaa-aaaaa-qaaaq-cai"
-    [1] = query(canister_id, w, "get_max_message_id")
+    [n] = query(canister_id, w, "get_max_message_id")
 
-    message = "hello world"
-    hash = h(message)
+    message = "hello diode #{n}"
     key_id = Wallet.address!(w)
-    _ = call(canister_id, w, "add_message", [:blob, :blob, :blob], [key_id, hash, message])
-    [2] = query(canister_id, w, "get_max_message_id")
+    isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
+    n2 = n + 1
+    [^n2] = query(canister_id, w, "get_max_message_id")
 
-    message = "hello world2"
-    hash = h(message)
+    message = "hello diode #{n2}"
     key_id = Wallet.address!(w)
-    _ = call(canister_id, w, "add_message", [:blob, :blob, :blob], [key_id, hash, message])
-    [3] = query(canister_id, w, "get_max_message_id")
+    isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
+    n3 = n2 + 1
+    [^n3] = query(canister_id, w, "get_max_message_id")
+
+    messages =
+      Enum.reduce(0..10, [], fn i, acc ->
+        acc ++ [{key_id, "hello diode batch #{n3}/#{i}"}]
+      end)
+
+    isOk(
+      call(canister_id, w, "add_messages", [{:vec, {:record, [{0, :blob}, {1, :blob}]}}], [
+        messages
+      ])
+    )
   end
+
+  def isOk([{tag, nil}]) do
+    if tag != namehash("ok") do
+      raise "Expected ok, got #{tag}"
+    end
+  end
+
+  def isOk(other), do: raise("Expected [{ok, nil}] variant, got #{inspect(other)}")
 
   def cbor_bytes(data) do
     %CBOR.Tag{tag: :bytes, value: data}
@@ -517,6 +672,7 @@ defmodule Test do
 end
 
 Finch.start_link(name: TestFinch)
+:erlang.system_flag(:backtrace_depth, 30)
 
 case System.argv() do
   ["bench"] ->
