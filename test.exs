@@ -363,7 +363,7 @@ defmodule Test do
     test_batch_write(w, canister_id, 10)
     {time, _} = :timer.tc(fn -> test_batch_write(w, canister_id, 10_000) end)
     IO.puts("Writing 10k messages took: #{div(time, 1000)} milliseconds")
-    test_batch_read(w, canister_id, 1000)
+    test_batch_read(w, canister_id, 1, 1000)
   end
 
   def test_batch_write(w, canister_id, size \\ 10) do
@@ -380,8 +380,10 @@ defmodule Test do
     isOk(call(canister_id, w, "add_messages", type_spec, [messages]))
   end
 
-  def test_batch_read(w, canister_id, size \\ 10) do
-    [messages] = query(canister_id, w, "get_messages_by_range", [:nat32, :nat32], [1, size])
+  def test_batch_read(w, canister_id, start, size \\ 10) do
+    [messages] =
+      query(canister_id, w, "get_messages_by_range", [:nat32, :nat32], [start, start + size - 1])
+
     ^size = length(messages)
     messages
   end
@@ -405,54 +407,55 @@ defmodule Test do
     canister_bin_id
   end
 
-  def benchmark(parallel \\ 1) do
+  def write_benchmark(parallel \\ 1) do
     :persistent_term.put(:print_requests?, false)
     w = Wallet.new()
     canister_id = default_canister_id()
 
-    Benchee.run(
-      %{
-        "insert 10" => fn ->
-          test_batch_write(w, canister_id, 10)
-        end,
-        "insert 100" => fn ->
-          test_batch_write(w, canister_id, 100)
-        end,
-        "insert 1000" => fn ->
-          test_batch_write(w, canister_id, 1000)
-        end,
-        "insert 10000" => fn ->
-          test_batch_write(w, canister_id, 10000)
-        end
-      },
+    [10, 100, 1000, 10000]
+    |> Enum.map(fn size ->
+      {"insert #{size}", fn -> test_batch_write(w, canister_id, size) end}
+    end)
+    |> Benchee.run(
       parallel: parallel,
       time: 30
     )
+  end
+
+  def anomaly_benchmark(parallel \\ 1) do
+    :persistent_term.put(:print_requests?, false)
+    w = Wallet.new()
+    canister_id = default_canister_id()
+    test_batch_write(w, canister_id, 20000)
+    cnt = :atomics.new(1, [])
+    next = fn -> rem(:atomics.add_get(cnt, 1, 1), 10_000) + 1 end
+
+    :persistent_term.put(:print_requests?, true)
+
+    [650, 651, 652, 653, 654, 655, 656, 657, 658, 659, 660]
+    |> Enum.map(fn size ->
+      test_batch_read(w, canister_id, next.(), size)
+    end)
+
+    :persistent_term.put(:print_requests?, false)
+    System.halt(0)
   end
 
   def read_benchmark(parallel \\ 1) do
     :persistent_term.put(:print_requests?, false)
     w = Wallet.new()
     canister_id = default_canister_id()
-    test_batch_write(w, canister_id, 10000)
+    test_batch_write(w, canister_id, 20000)
+    cnt = :atomics.new(1, [])
+    next = fn -> rem(:atomics.add_get(cnt, 1, 1), 10_000) + 1 end
 
-    Benchee.run(
-      %{
-        "read 10" => fn ->
-          test_batch_read(w, canister_id, 10)
-        end,
-        "read 100" => fn ->
-          test_batch_read(w, canister_id, 100)
-        end,
-        "read 1000" => fn ->
-          test_batch_read(w, canister_id, 1000)
-        end,
-        "read 10000" => fn ->
-          test_batch_read(w, canister_id, 10000)
-        end
-      },
+    [10, 100, 1000, 10000]
+    |> Enum.map(fn size ->
+      {"read #{size}", fn -> test_batch_read(w, canister_id, next.(), size) end}
+    end)
+    |> Benchee.run(
       parallel: parallel,
-      time: 10
+      time: 5
     )
   end
 end
@@ -463,12 +466,17 @@ Finch.start_link(name: TestFinch)
 case System.argv() do
   ["write_bench"] ->
     Test.ensure_service()
-    Test.benchmark()
+    Test.write_benchmark()
     System.halt(0)
 
   ["read_bench"] ->
     Test.ensure_service()
     Test.read_benchmark()
+    System.halt(0)
+
+  ["anomaly"] ->
+    Test.ensure_service()
+    Test.anomaly_benchmark()
     System.halt(0)
 
   ["test"] ->
