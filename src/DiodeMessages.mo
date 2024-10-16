@@ -23,7 +23,6 @@ module DiodeMessages {
 
   let inbox_entry_size : Nat64 = 80;
 
-
   type KeyInboxEntry = {
     var min_msg_id: Nat32;
     var max_msg_id: Nat32;
