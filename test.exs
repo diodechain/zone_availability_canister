@@ -190,11 +190,10 @@ defmodule Test do
     p1 = System.os_time(:millisecond)
 
     if print_requests?() do
-      IO.puts("")
       method = opayload["content"]["method_name"] || ""
 
       IO.puts(
-        "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes)"
+        "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes request)"
       )
 
       # if method == :post do
@@ -209,8 +208,10 @@ defmodule Test do
     if print_requests?() do
       # IO.puts("<< #{inspect(tag.value)}")
       IO.puts(
-        "POST latency: #{p2 - now}ms http: #{p1 - now}ms response_size: #{byte_size(ret.body)}"
+        "POST latency: #{p2 - now}ms http: #{p1 - now}ms (#{byte_size(ret.body)} bytes response)"
       )
+
+      IO.puts("")
     end
 
     tag.value
@@ -422,7 +423,7 @@ defmodule Test do
     )
   end
 
-  def anomaly_benchmark(parallel \\ 1) do
+  def anomaly_benchmark() do
     :persistent_term.put(:print_requests?, false)
     w = Wallet.new()
     canister_id = default_canister_id()
@@ -434,6 +435,7 @@ defmodule Test do
 
     [650, 651, 652, 653, 654, 655, 656, 657, 658, 659, 660]
     |> Enum.map(fn size ->
+      IO.puts("Reading #{size} messages")
       test_batch_read(w, canister_id, next.(), size)
     end)
 
