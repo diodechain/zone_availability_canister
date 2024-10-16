@@ -77,6 +77,32 @@ actor {
         assert (DiodeMessages.get_min_message_id_by_key(dm, make_key(1))) == ?1;
         assert (DiodeMessages.get_max_message_id_by_key(dm, make_key(1))) == ?2;
       });
+
+      await test("Should read messages from inbox", func() : async () {
+        assert isOk(DiodeMessages.add_message(dm, make_key(1), make_hash(1), "cipertext 1"));
+        assert isOk(DiodeMessages.add_message(dm, make_key(1), make_hash(2), "cipertext 2"));
+        assert isOk(DiodeMessages.add_message(dm, make_key(2), make_hash(3), "cipertext 3"));
+        assert (DiodeMessages.get_max_message_id(dm)) == 3;
+
+        var messages = DiodeMessages.get_messages_by_range(dm, 1, 1);
+        assert messages.size() == 1;
+        messages := DiodeMessages.get_messages_by_range(dm, 1, 2);
+        assert messages.size() == 2;
+
+        var messages_for_1 = DiodeMessages.get_messages_by_range_for_key(dm, make_key(1), 1, 2);
+        assert messages_for_1.size() == 2;
+        messages_for_1 := DiodeMessages.get_messages_by_range_for_key(dm, make_key(1), 1, 2);
+        assert messages_for_1.size() == 2;
+        messages_for_1 := DiodeMessages.get_messages_by_range_for_key(dm, make_key(1), 1, 3);
+        assert messages_for_1.size() == 2;
+
+        var messages_for_2 = DiodeMessages.get_messages_by_range_for_key(dm, make_key(2), 1, 1);
+        assert messages_for_2.size() == 0;
+        messages_for_2 := DiodeMessages.get_messages_by_range_for_key(dm, make_key(2), 1, 3);
+        assert messages_for_2.size() == 0;
+        messages_for_2 := DiodeMessages.get_messages_by_range_for_key(dm, make_key(2), 3, 3);
+        assert messages_for_2.size() == 1;
+      });
     });
   };
 

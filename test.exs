@@ -13,16 +13,22 @@ defmodule Candid do
   # https://github.com/dfinity/candid/blob/master/spec/Candid.md#core-grammar
 
   def decode_parameters("DIDL" <> term) do
-    {definition_table, rest} = decode_list(term, &decode_type/1) |> IO.inspect(label: "definition_table")
-    {argument_types, rest} = decode_list(rest, &decode_type/1) |> IO.inspect(label: "argument_types")
+    {definition_table, rest} = decode_definition_list(term)
+    {argument_types, rest} = decode_list(rest, &decode_type(&1, definition_table))
+    decode_arguments(argument_types, rest, definition_table)
+  end
 
-    argument_types =
-      Enum.map(argument_types, fn
-        {:comptype, n} -> Enum.at(definition_table, n)
-        type -> type
+  defp decode_definition_list(term) do
+    {len, rest} = LEB128.decode_unsigned!(term)
+
+    if len == 0 do
+      {[], rest}
+    else
+      Enum.reduce(1..len, {[], rest}, fn _n, {definition_table, rest} ->
+        {item, rest} = decode_type(rest, definition_table)
+        {definition_table ++ [item], rest}
       end)
-
-    decode_arguments(argument_types, rest)
+    end
   end
 
   defp decode_list(term, fun) do
@@ -39,81 +45,137 @@ defmodule Candid do
     decode_list_items(n - 1, rest, fun, acc ++ [item])
   end
 
-  defp decode_arguments([type | types], rest) do
-    {value, rest} = decode_type_value(type, rest)
-    {values, rest} = decode_arguments(types, rest)
+  defp decode_arguments([type | types], rest, definition_table) do
+    {value, rest} = decode_type_value(type, rest, definition_table)
+    {values, rest} = decode_arguments(types, rest, definition_table)
     {[value | values], rest}
   end
 
-  defp decode_arguments([], rest) do
+  defp decode_arguments([], rest, _definition_table) do
     {[], rest}
   end
 
-  def decode_type_value(:nat32, <<value::unsigned-little-size(32), rest::binary>>),
+  def decode_type_value(
+        :nat32,
+        <<value::unsigned-little-size(32), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
+
+  def decode_type_value(
+        :int32,
+        <<value::signed-little-size(32), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
+
+  def decode_type_value(
+        :nat64,
+        <<value::unsigned-little-size(64), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
+
+  def decode_type_value(
+        :int64,
+        <<value::signed-little-size(64), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
+
+  def decode_type_value(
+        :nat8,
+        <<value::unsigned-little-size(8), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
+
+  def decode_type_value(:int8, <<value::signed-little-size(8), rest::binary>>, _definition_table),
     do: {value, rest}
 
-  def decode_type_value(:int32, <<value::signed-little-size(32), rest::binary>>),
-    do: {value, rest}
+  def decode_type_value(
+        :nat16,
+        <<value::unsigned-little-size(16), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
 
-  def decode_type_value(:nat64, <<value::unsigned-little-size(64), rest::binary>>),
-    do: {value, rest}
+  def decode_type_value(
+        :int16,
+        <<value::signed-little-size(16), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
 
-  def decode_type_value(:int64, <<value::signed-little-size(64), rest::binary>>),
-    do: {value, rest}
+  def decode_type_value(
+        :nat32,
+        <<value::unsigned-little-size(32), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
 
-  def decode_type_value(:nat8, <<value::unsigned-little-size(8), rest::binary>>),
-    do: {value, rest}
+  def decode_type_value(
+        :int32,
+        <<value::signed-little-size(32), rest::binary>>,
+        _definition_table
+      ),
+      do: {value, rest}
 
-  def decode_type_value(:int8, <<value::signed-little-size(8), rest::binary>>), do: {value, rest}
+  def decode_type_value(:nat, rest, _definition_table), do: LEB128.decode_unsigned!(rest)
+  def decode_type_value(:int, rest, _definition_table), do: LEB128.decode_unsigned!(rest)
+  def decode_type_value(:null, rest, _definition_table), do: {nil, rest}
 
-  def decode_type_value(:nat16, <<value::unsigned-little-size(16), rest::binary>>),
-    do: {value, rest}
-
-  def decode_type_value(:int16, <<value::signed-little-size(16), rest::binary>>),
-    do: {value, rest}
-
-  def decode_type_value(:nat32, <<value::unsigned-little-size(32), rest::binary>>),
-    do: {value, rest}
-
-  def decode_type_value(:int32, <<value::signed-little-size(32), rest::binary>>),
-    do: {value, rest}
-
-  def decode_type_value(:nat, rest), do: LEB128.decode_unsigned!(rest)
-  def decode_type_value(:int, rest), do: LEB128.decode_unsigned!(rest)
-  def decode_type_value(:null, rest), do: {nil, rest}
-
-  def decode_type_value({:variant, types}, rest) do
+  def decode_type_value({:variant, types}, rest, definition_table) do
     {idx, rest} = LEB128.decode_unsigned!(rest)
-    {name, type} = Enum.at(types, idx)
-    {value, rest} = decode_type_value(type, rest)
+
+    {name, type} =
+      Enum.at(types, idx) || raise "unimplemented variant index: #{idx} in #{inspect(types)}"
+
+    {value, rest} = decode_type_value(type, rest, definition_table)
     {{name, value}, rest}
   end
 
-  def decode_type_value({:record, types}, rest) do
+  def decode_type_value({:record, types}, rest, definition_table) do
     Enum.reduce(types, {[], rest}, fn {name, type}, {acc, rest} ->
-      {value, rest} = decode_type_value(type, rest)
+      # According to spec: https://github.com/dfinity/candid/blob/master/spec/Candid.md#core-grammar
+      # M(kv*  : record {<fieldtype>*}) = M(kv : <fieldtype>)*
+      # M : (<nat>, <val>) -> <fieldtype> -> i8*
+      # M((k,v) : k:<datatype>) = M(v : <datatype>)
+      # But it seems there is no field name in the real world responses
+
+      # {^name, rest} = LEB128.decode_unsigned!(rest)
+      {value, rest} = decode_type_value(type, rest, definition_table)
+
       if name < 256 do
         {[value | acc], rest}
       else
         {[{name, value} | acc], rest}
       end
     end)
-    |> then(fn {values, rest} -> {Enum.reverse(values), rest} end)
+    |> then(fn {values, rest} -> {List.to_tuple(Enum.reverse(values)), rest} end)
   end
 
-  def decode_type_value({:vec, :nat8}, rest) do
+  def decode_type_value({:vec, :nat8}, rest, _definition_table) do
     {len, rest} = LEB128.decode_unsigned!(rest)
     <<binary::binary-size(len), rest::binary>> = rest
     {binary, rest}
   end
 
-  def decode_type_value({:vec, subtype}, rest) do
-    decode_list(rest, &decode_type_value(subtype, &1))
+  def decode_type_value({:vec, subtype}, rest, definition_table) do
+    decode_list(rest, &decode_type_value(subtype, &1, definition_table))
   end
 
-  def decode_type_value(type, rest) do
+  def decode_type_value({:comptype, type}, rest, definition_table) do
+    type =
+      Enum.at(definition_table, type) ||
+        raise "unimplemented comptype: #{inspect(type)} in #{inspect(definition_table)}"
+
+    decode_type_value(type, rest, definition_table)
+  end
+
+  def decode_type_value(type, rest, _definition_table) do
     # https://github.com/dfinity/candid/blob/master/spec/Candid.md#core-grammar
-    raise "unimplemented type: #{inspect({type, rest})}"
+    raise "unimplemented type: #{inspect(type)} rest: #{inspect(rest)}"
   end
 
   def encode_parameters(types, values) do
@@ -126,20 +188,12 @@ defmodule Candid do
         if Map.has_key?(typemap, type) do
           {typemap, definition_table}
         else
-          encoding = encode_type(type)
-
-          if byte_size(encoding) == 1 do
-            {Map.put(typemap, type, encoding), definition_table}
-          else
-            new_encoding = length(definition_table) |> LEB128.encode_signed()
-            definition_table = definition_table ++ [encoding]
-
-            {Map.put(typemap, type, new_encoding), definition_table}
-          end
+          {encoding, definition_table} = encode_type(type, definition_table)
+          {Map.put(typemap, type, encoding), definition_table}
         end
       end)
 
-    definition_table = encode_list(definitions, fn encoding -> encoding end)
+    definition_table = encode_list(definitions)
     argument_types = encode_list(types, fn type -> typemap[type] end)
 
     binvalues =
@@ -148,13 +202,24 @@ defmodule Candid do
       |> Enum.join("")
 
     result = "DIDL" <> definition_table <> argument_types <> binvalues
-    {^values, ""} = decode_parameters(result) |> IO.inspect(label: "re-decoded")
+    {^values, ""} = decode_parameters(result)
     result
   end
 
-  def encode_list(list, fun) when is_list(list) do
+  def encode_list(list, fun \\ fn x -> x end) when is_list(list) do
     len = length(list)
     LEB128.encode_unsigned(len) <> Enum.join(Enum.map(list, fun), "")
+  end
+
+  def encode_type_list(types, definition_table, fun \\ &encode_type/2) when is_list(types) do
+    {encoding, definition_table} =
+      Enum.reduce(types, {"", definition_table}, fn type, {acc, definition_table} ->
+        {encoding, definition_table} = fun.(type, definition_table)
+        {acc <> encoding, definition_table}
+      end)
+
+    len = length(types)
+    {LEB128.encode_unsigned(len) <> encoding, definition_table}
   end
 
   def encode_type_value(:null, _), do: ""
@@ -202,91 +267,129 @@ defmodule Candid do
       end
 
     List.zip([types, values])
-    |> Enum.map(fn {{tag, type}, value} ->
-      LEB128.encode_unsigned(tag) <> encode_type_value(type, value)
+    |> Enum.map(fn {{_tag, type}, value} ->
+      # Seems in the real world responses, the tag is not encoded
+      # LEB128.encode_unsigned(tag) <> encode_type_value(type, value)
+      encode_type_value(type, value)
     end)
     |> Enum.join("")
   end
 
-  def encode_type(:null), do: LEB128.encode_signed(-1)
-  def encode_type(:bool), do: LEB128.encode_signed(-2)
-  def encode_type(:nat), do: LEB128.encode_signed(-3)
-  def encode_type(:int), do: LEB128.encode_signed(-4)
-  def encode_type(:nat8), do: LEB128.encode_signed(-5)
-  def encode_type(:nat16), do: LEB128.encode_signed(-6)
-  def encode_type(:nat32), do: LEB128.encode_signed(-7)
-  def encode_type(:nat64), do: LEB128.encode_signed(-8)
-  def encode_type(:int8), do: LEB128.encode_signed(-9)
-  def encode_type(:int16), do: LEB128.encode_signed(-10)
-  def encode_type(:int32), do: LEB128.encode_signed(-11)
-  def encode_type(:int64), do: LEB128.encode_signed(-12)
-  def encode_type(:float32), do: LEB128.encode_signed(-13)
-  def encode_type(:float64), do: LEB128.encode_signed(-14)
-  def encode_type(:text), do: LEB128.encode_signed(-15)
-  def encode_type(:reserved), do: LEB128.encode_signed(-16)
-  def encode_type(:empty), do: LEB128.encode_signed(-17)
-  def encode_type(:principal), do: LEB128.encode_signed(-24)
-  def encode_type({:opt, type}), do: LEB128.encode_signed(-18) <> encode_type(type)
-  def encode_type({:vec, type}), do: LEB128.encode_signed(-19) <> encode_type(type)
-  def encode_type(:blob), do: encode_type({:vec, :nat8})
+  def encode_type(:null, definition_table), do: {LEB128.encode_signed(-1), definition_table}
+  def encode_type(:bool, definition_table), do: {LEB128.encode_signed(-2), definition_table}
+  def encode_type(:nat, definition_table), do: {LEB128.encode_signed(-3), definition_table}
+  def encode_type(:int, definition_table), do: {LEB128.encode_signed(-4), definition_table}
+  def encode_type(:nat8, definition_table), do: {LEB128.encode_signed(-5), definition_table}
+  def encode_type(:nat16, definition_table), do: {LEB128.encode_signed(-6), definition_table}
+  def encode_type(:nat32, definition_table), do: {LEB128.encode_signed(-7), definition_table}
+  def encode_type(:nat64, definition_table), do: {LEB128.encode_signed(-8), definition_table}
+  def encode_type(:int8, definition_table), do: {LEB128.encode_signed(-9), definition_table}
+  def encode_type(:int16, definition_table), do: {LEB128.encode_signed(-10), definition_table}
+  def encode_type(:int32, definition_table), do: {LEB128.encode_signed(-11), definition_table}
+  def encode_type(:int64, definition_table), do: {LEB128.encode_signed(-12), definition_table}
+  def encode_type(:float32, definition_table), do: {LEB128.encode_signed(-13), definition_table}
+  def encode_type(:float64, definition_table), do: {LEB128.encode_signed(-14), definition_table}
+  def encode_type(:text, definition_table), do: {LEB128.encode_signed(-15), definition_table}
 
-  def encode_type({:record, types}) do
-    LEB128.encode_signed(-20) <> encode_list(types, &encode_fieldtype/1)
+  def encode_type(:reserved, definition_table),
+    do: {LEB128.encode_signed(-16), definition_table}
+
+  def encode_type(:empty, definition_table), do: {LEB128.encode_signed(-17), definition_table}
+
+  def encode_type(:principal, definition_table),
+    do: {LEB128.encode_signed(-24), definition_table}
+
+  def encode_type(:blob, definition_table), do: encode_type({:vec, :nat8}, definition_table)
+
+  def encode_type({comptype, subtype}, definition_table) when comptype in [:opt, :vec] do
+    {subencoding, definition_table} = encode_type(subtype, definition_table)
+
+    encoding =
+      case comptype do
+        :opt -> LEB128.encode_signed(-18)
+        :vec -> LEB128.encode_signed(-19)
+      end <> subencoding
+
+    maybe_add_complex_type(encoding, definition_table)
   end
 
-  def encode_fieldtype({tag, type}) do
-    LEB128.encode_unsigned(tag) <> encode_type(type)
+  def encode_type({:record, subtypes}, definition_table) do
+    {encoding, definition_table} =
+      encode_type_list(subtypes, definition_table, &encode_fieldtype/2)
+
+    encoding = LEB128.encode_signed(-20) <> encoding
+    maybe_add_complex_type(encoding, definition_table)
   end
 
-  def decode_type(term) when is_binary(term) do
-    decode_type(LEB128.decode_signed!(term))
+  defp maybe_add_complex_type(encoding, definition_table) do
+    case Enum.find_index(definition_table, fn encoding1 -> encoding1 == encoding end) do
+      nil -> {LEB128.encode_signed(length(definition_table)), definition_table ++ [encoding]}
+      index -> {LEB128.encode_signed(index), definition_table}
+    end
   end
 
-  def decode_type({-1, rest}), do: {:null, rest}
-  def decode_type({-2, rest}), do: {:bool, rest}
-  def decode_type({-3, rest}), do: {:nat, rest}
-  def decode_type({-4, rest}), do: {:int, rest}
-  def decode_type({-5, rest}), do: {:nat8, rest}
-  def decode_type({-6, rest}), do: {:nat16, rest}
-  def decode_type({-7, rest}), do: {:nat32, rest}
-  def decode_type({-8, rest}), do: {:nat64, rest}
-  def decode_type({-9, rest}), do: {:int8, rest}
-  def decode_type({-10, rest}), do: {:int16, rest}
-  def decode_type({-11, rest}), do: {:int32, rest}
-  def decode_type({-12, rest}), do: {:int64, rest}
-  def decode_type({-13, rest}), do: {:float32, rest}
-  def decode_type({-14, rest}), do: {:float64, rest}
-  def decode_type({-15, rest}), do: {:text, rest}
-  def decode_type({-16, rest}), do: {:reserved, rest}
-  def decode_type({-17, rest}), do: {:empty, rest}
+  def encode_fieldtype({tag, type}, definition_table) do
+    {encoding, definition_table} = encode_type(type, definition_table)
+    {LEB128.encode_unsigned(tag) <> encoding, definition_table}
+  end
 
-  def decode_type({-19, rest}) do
-    {subtype, rest} = decode_type(rest)
+  def decode_type(term, definition_table) when is_binary(term) do
+    decode_type(LEB128.decode_signed!(term), definition_table)
+  end
+
+  def decode_type({-1, rest}, _definition_table), do: {:null, rest}
+  def decode_type({-2, rest}, _definition_table), do: {:bool, rest}
+  def decode_type({-3, rest}, _definition_table), do: {:nat, rest}
+  def decode_type({-4, rest}, _definition_table), do: {:int, rest}
+  def decode_type({-5, rest}, _definition_table), do: {:nat8, rest}
+  def decode_type({-6, rest}, _definition_table), do: {:nat16, rest}
+  def decode_type({-7, rest}, _definition_table), do: {:nat32, rest}
+  def decode_type({-8, rest}, _definition_table), do: {:nat64, rest}
+  def decode_type({-9, rest}, _definition_table), do: {:int8, rest}
+  def decode_type({-10, rest}, _definition_table), do: {:int16, rest}
+  def decode_type({-11, rest}, _definition_table), do: {:int32, rest}
+  def decode_type({-12, rest}, _definition_table), do: {:int64, rest}
+  def decode_type({-13, rest}, _definition_table), do: {:float32, rest}
+  def decode_type({-14, rest}, _definition_table), do: {:float64, rest}
+  def decode_type({-15, rest}, _definition_table), do: {:text, rest}
+  def decode_type({-16, rest}, _definition_table), do: {:reserved, rest}
+  def decode_type({-17, rest}, _definition_table), do: {:empty, rest}
+
+  def decode_type({-19, rest}, definition_table) do
+    {subtype, rest} = decode_type(rest, definition_table)
     {{:vec, subtype}, rest}
   end
 
-  def decode_type({-20, rest}) do
-    {subtypes, rest} = decode_list(rest, &decode_fieldtype/1)
+  def decode_type({-20, rest}, definition_table) do
+    {subtypes, rest} = decode_list(rest, &decode_fieldtype(&1, definition_table))
     {{:record, subtypes}, rest}
   end
 
-  def decode_type({-21, rest}) do
-    {subtypes, rest} = decode_list(rest, &decode_fieldtype/1)
+  def decode_type({-21, rest}, definition_table) do
+    {subtypes, rest} = decode_list(rest, &decode_fieldtype(&1, definition_table))
     {{:variant, subtypes}, rest}
   end
 
-  def decode_type({-24, rest}), do: {:principal, rest}
-  def decode_type({n, rest}) when n >= 0, do: {{:comptype, n}, rest}
+  def decode_type({-24, rest}, _definition_table), do: {:principal, rest}
 
-  def decode_fieldtype(rest) do
+  def decode_type({n, rest}, definition_table) when n >= 0 do
+    type = Enum.at(definition_table, n) || {:comptype, n}
+    {type, rest}
+  end
+
+  def decode_fieldtype(rest, definition_table) do
     {n, rest} = LEB128.decode_unsigned!(rest)
-    {type, rest} = decode_type(rest)
+    {type, rest} = decode_type(rest, definition_table)
     {{n, type}, rest}
   end
 end
 
 defmodule Test do
   alias DiodeClient.Wallet
+
+  def default_canister_id() do
+    "bkyz2-fmaaa-aaaaa-qaaaq-cai"
+  end
 
   def default_host() do
     "http://127.0.0.1:4943"
@@ -463,7 +566,11 @@ defmodule Test do
 
     if print_requests?() do
       IO.puts("")
-      IO.puts("POST #{String.replace_prefix(host, host(), "")}")
+      method = opayload["content"]["method_name"] || ""
+
+      IO.puts(
+        "POST #{method} #{String.replace_prefix(host, host(), "")} (#{byte_size(payload)} bytes)"
+      )
 
       # if method == :post do
       #   IO.puts(">> #{inspect(opayload)}")
@@ -476,7 +583,9 @@ defmodule Test do
 
     if print_requests?() do
       # IO.puts("<< #{inspect(tag.value)}")
-      IO.puts("POST latency: #{p2 - now}ms http: #{p1 - now}ms")
+      IO.puts(
+        "POST latency: #{p2 - now}ms http: #{p1 - now}ms response_size: #{byte_size(ret.body)}"
+      )
     end
 
     tag.value
@@ -565,9 +674,12 @@ defmodule Test do
     {decoded, ""} =
       <<68, 73, 68, 76, 1, 107, 2, 156, 194, 1, 127, 229, 142, 180, 2, 113, 1, 0, 0>>
       |> Candid.decode_parameters()
-      |> IO.inspect(label: "decode_parameters")
 
     ^decoded = [{namehash("ok"), nil}]
+
+    {[{0, 1}], ""} =
+      <<68, 73, 68, 76, 1, 108, 2, 0, 121, 1, 121, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0>>
+      |> Candid.decode_parameters()
 
     wallet =
       wallet_from_pem("""
@@ -584,7 +696,8 @@ defmodule Test do
     idsize = byte_size(wallet_id(wallet))
     ^idsize = byte_size(refbin)
     ^refbin = wallet_id(wallet)
-    ^reftext = IO.inspect(wallet_textual(wallet), label: "wallet_textual")
+    ^reftext = wallet_textual(wallet)
+    IO.puts("wallet textual: #{reftext}")
 
     "0xdb8e57abc8cda1525d45fdd2637af091bc1f28b35819a40df71517d1501f2c76" =
       h(1_685_570_400_000_000_000) |> DiodeClient.Base16.encode()
@@ -603,16 +716,23 @@ defmodule Test do
       })
       |> DiodeClient.Base16.encode()
 
+    w = Wallet.new()
+    IO.puts("wallet_textual: #{wallet_textual(w)}")
+    canister_id = default_canister_id()
+
+    [{0, 1}] = call(canister_id, w, "test_record_output", [], [])
+
+    [3] =
+      call(canister_id, w, "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
+
+    # test_batch_write(w, canister_id)
+
     %{"certified_height" => height, "replica_health_status" => "healthy", "root_key" => root_key} =
       status()
 
     IO.puts("certified_height: #{height}")
     IO.puts("root_key: #{inspect(Base.encode16(root_key.value))}")
 
-    w = Wallet.new()
-    IO.puts("wallet_textual: #{wallet_textual(w)}")
-
-    canister_id = "bkyz2-fmaaa-aaaaa-qaaaq-cai"
     [n] = query(canister_id, w, "get_max_message_id")
 
     message = "hello diode #{n}"
@@ -627,16 +747,31 @@ defmodule Test do
     n3 = n2 + 1
     [^n3] = query(canister_id, w, "get_max_message_id")
 
-    messages =
-      Enum.reduce(0..10, [], fn i, acc ->
-        acc ++ [{key_id, "hello diode batch #{n3}/#{i}"}]
-      end)
+    test_batch_write(w, canister_id, 10)
+    {time, _} = :timer.tc(fn -> test_batch_write(w, canister_id, 10_000) end)
+    IO.puts("Writing 10k messages took: #{div(time, 1000)} milliseconds")
 
-    isOk(
-      call(canister_id, w, "add_messages", [{:vec, {:record, [{0, :blob}, {1, :blob}]}}], [
-        messages
-      ])
-    )
+    test_batch_read(w, canister_id, 1000)
+  end
+
+  def test_batch_write(w, canister_id, size \\ 10) do
+    key_id = Wallet.address!(w)
+    n = System.os_time(:nanosecond)
+    type_spec = [{:vec, {:record, [{0, :blob}, {1, :blob}]}}]
+
+    messages =
+      Enum.reduce(1..size, [], fn i, acc ->
+        [{key_id, "hello diode batch #{n}/#{i}"} | acc]
+      end)
+      |> Enum.reverse()
+
+    isOk(call(canister_id, w, "add_messages", type_spec, [messages]))
+  end
+
+  def test_batch_read(w, canister_id, size \\ 10) do
+    [messages] = query(canister_id, w, "get_messages_by_range", [:nat32, :nat32], [1, size])
+    ^size = length(messages)
+    messages
   end
 
   def isOk([{tag, nil}]) do
@@ -660,13 +795,52 @@ defmodule Test do
 
   def benchmark(parallel \\ 1) do
     :persistent_term.put(:print_requests?, false)
+    w = Wallet.new()
+    canister_id = default_canister_id()
 
     Benchee.run(
       %{
-        "test_name" => fn -> :ok end
+        "insert 10" => fn ->
+          test_batch_write(w, canister_id, 10)
+        end,
+        "insert 100" => fn ->
+          test_batch_write(w, canister_id, 100)
+        end,
+        "insert 1000" => fn ->
+          test_batch_write(w, canister_id, 1000)
+        end,
+        "insert 10000" => fn ->
+          test_batch_write(w, canister_id, 10000)
+        end
       },
       parallel: parallel,
-      time: 5
+      time: 30
+    )
+  end
+
+  def read_benchmark(parallel \\ 1) do
+    :persistent_term.put(:print_requests?, false)
+    w = Wallet.new()
+    canister_id = default_canister_id()
+    test_batch_write(w, canister_id, 10000)
+
+    Benchee.run(
+      %{
+        "read 10" => fn ->
+          test_batch_read(w, canister_id, 10)
+        end,
+        "read 100" => fn ->
+          test_batch_read(w, canister_id, 100)
+        end,
+        "read 1000" => fn ->
+          test_batch_read(w, canister_id, 1000)
+        end,
+        "read 10000" => fn ->
+          test_batch_read(w, canister_id, 10000)
+        end
+      },
+      parallel: parallel,
+      time: 10
     )
   end
 end
@@ -675,21 +849,24 @@ Finch.start_link(name: TestFinch)
 :erlang.system_flag(:backtrace_depth, 30)
 
 case System.argv() do
-  ["bench"] ->
+  ["write_bench"] ->
     Test.ensure_service()
     Test.benchmark()
     System.halt(0)
 
-  ["benchp"] ->
+  ["read_bench"] ->
     Test.ensure_service()
-    Test.benchmark(20)
+    Test.read_benchmark()
     System.halt(0)
+
+  ["test"] ->
+    :ok
 
   [] ->
     :ok
 
   _other ->
-    IO.puts("Wrong argument. Try <none>, dev, lt or dev")
+    IO.puts("Wrong argument. Try <none>, test, write_bench, read_bench")
     System.halt(1)
 end
 

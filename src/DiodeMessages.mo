@@ -1,8 +1,10 @@
 import { abs } = "mo:base/Int";
 import Result "mo:base/Result";
+import Iter "mo:base/Iter";
 import Nat64 "mo:base/Nat64";
 import Nat32 "mo:base/Nat32";
 import { now } = "mo:base/Time";
+import List "mo:base/List";
 import Region "mo:base/Region";
 import Blob "mo:base/Blob";
 import Map "mo:map/Map";
@@ -146,6 +148,40 @@ module DiodeMessages {
     let offset = get_message_offset_by_id(store, message_id);
     return get_message_by_offset(store, offset);
   };
+
+  public func get_messages_by_range(store: MessageStore, min_message_id: Nat32, in_max_message_id: Nat32) : [Message] {
+    let max_message_id = Nat32.min(in_max_message_id, get_max_message_id(store));
+    if (min_message_id > max_message_id) {
+      return [];
+    };
+
+    Iter.range(Nat32.toNat(min_message_id), Nat32.toNat(max_message_id))
+    |> Iter.map(_, func (i : Nat) : Message {
+        let offset = get_message_offset_by_id(store, Nat32.fromNat(i));
+        get_message_by_offset(store, offset);
+    })
+    |> Iter.toArray(_);
+  };
+
+  public func get_messages_by_range_for_key(store: MessageStore, key_id: Blob, min_message_id: Nat32, in_max_message_id: Nat32) : [Message] {
+    assert(min_message_id <= in_max_message_id);
+    let max_message_id = Nat32.max(in_max_message_id, get_max_message_id(store));
+
+    var messages : List.List<Message> = List.nil<Message>();
+    var current_message_id = min_message_id;
+    while (current_message_id != 0 and current_message_id <= max_message_id) {
+      let message = get_message_by_id(store, current_message_id);
+      if (message.key_id != key_id) {
+        return List.toArray(messages);
+      };
+
+      messages := List.push(message, messages);
+      current_message_id := message.next_msg_id;
+    };
+
+    return List.toArray(messages);
+  };
+
 
   private func get_message_by_offset(store: MessageStore, offset: Nat64) : Message {
     let id = Region.loadNat32(store.inbox.region, offset);

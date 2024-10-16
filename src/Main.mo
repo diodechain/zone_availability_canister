@@ -18,7 +18,7 @@ actor {
         case (#err(e)) {
           return #err(e);
         };
-        case _ {};
+        case (#ok) {};
       };
     };
     #ok;
@@ -30,6 +30,10 @@ actor {
 
   public shared query func get_message_by_id(message_id: Nat32) : async DiodeMessages.Message {
     DiodeMessages.get_message_by_id(dm, message_id);
+  };
+
+  public shared query func get_messages_by_range(min_message_id: Nat32, max_message_id: Nat32) : async [DiodeMessages.Message] {
+    DiodeMessages.get_messages_by_range(dm, min_message_id, max_message_id);
   };
 
   public shared query func get_min_message_id() : async Nat32 {
@@ -47,4 +51,19 @@ actor {
   public shared query func get_max_message_id_by_key(key_id: Blob) : async ?Nat32 {
     DiodeMessages.get_max_message_id_by_key(dm, key_id);
   };
+
+  public shared query func get_messages_by_range_for_key(key_id: Blob, min_message_id: Nat32, max_message_id: Nat32) : async [DiodeMessages.Message] {
+    DiodeMessages.get_messages_by_range_for_key(dm, key_id, min_message_id, max_message_id);
+  };
+
+
+  public shared func test_record_output() : async ((Nat32, Nat32)) {
+    (0, 1);
+  };
+
+  public shared func test_record_input(record: (Nat32, Nat32)) : async Nat32 {
+    let (a, b) = record;
+    a + b;
+  };
+
 };
