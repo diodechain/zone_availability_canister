@@ -2,8 +2,18 @@ import Result "mo:base/Result";
 import Nat32 "mo:base/Nat32";
 import Sha256 "mo:sha2/Sha256";
 import DiodeMessages "./DiodeMessages";
+import Oracle "./Oracle";
+import Types "./Types";
+// import Cycles "mo:base/ExperimentalCycles";
 
-actor {
+shared(_init_msg) actor class Main(_args : {
+  zone_id: Text;
+  rpc_host: Text;
+  rpc_path: Text;
+}) = this {
+  stable var zone_id = _args.zone_id;
+  stable var rpc_host = _args.rpc_host;
+  stable var rpc_path = _args.rpc_path;
   stable var dm: DiodeMessages.MessageStore = DiodeMessages.new();
 
   public shared func add_message(key_id: Blob, ciphertext: Blob) : async Result.Result<(), Text> {
@@ -55,6 +65,18 @@ actor {
   public shared query func get_messages_by_range_for_key(key_id: Blob, min_message_id: Nat32, max_message_id: Nat32) : async [DiodeMessages.Message] {
     DiodeMessages.get_messages_by_range_for_key(dm, key_id, min_message_id, max_message_id);
   };
+
+
+  public shared func get_zone_members() : async Types.HttpResponsePayload {
+    await Oracle.get_zone_members(zone_id, rpc_host, rpc_path);
+  };
+
+  // public shared func get_zone_members() : async [Nat8] {
+  //   let request = Oracle.create_member_list_request(zone_id, rpc_host, rpc_path);
+  //   Cycles.add(20_949_972_000);
+  //   let response = await Oracle.http_actor().http_request(request);
+  //   Oracle.process_http_response(response);
+  // };
 
 
   public shared func test_record_output() : async ((Nat32, Nat32)) {
