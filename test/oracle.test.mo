@@ -8,7 +8,7 @@ actor {
         Debug.print("Getting zone members");
         let members = await Oracle.get_zone_members("0xe18cbbd6bd2babd532b297022533bdb00251ed58", "prenet.diode.io", ":8445/");
         Debug.print(debug_show(members));
-        assert members.body.size() != 0;
+        assert members.size() != 0;
       });
     });
   };
