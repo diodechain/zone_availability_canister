@@ -2,7 +2,9 @@ import Result "mo:base/Result";
 import Nat32 "mo:base/Nat32";
 import Sha256 "mo:sha2/Sha256";
 import DiodeMessages "./DiodeMessages";
-import Oracle "./Oracle";
+import MemberCache "./MemberCache";
+import Principal "mo:base/Principal";
+import Debug "mo:base/Debug";
 
 shared (_init_msg) actor class Main(
   _args : {
@@ -11,10 +13,8 @@ shared (_init_msg) actor class Main(
     rpc_path : Text;
   }
 ) = this {
-  stable var zone_id = _args.zone_id;
-  stable var rpc_host = _args.rpc_host;
-  stable var rpc_path = _args.rpc_path;
   stable var dm : DiodeMessages.MessageStore = DiodeMessages.new();
+  stable var zone_members : MemberCache.Cache = MemberCache.new(_args. zone_id, _args.rpc_host, _args.rpc_path);
 
   public shared func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<(), Text> {
     let hash = Sha256.fromBlob(#sha256, ciphertext);
@@ -66,12 +66,17 @@ shared (_init_msg) actor class Main(
     DiodeMessages.get_messages_by_range_for_key(dm, key_id, min_message_id, max_message_id);
   };
 
-  public shared func get_zone_members() : async ?Blob {
-    await Oracle.get_zone_members(zone_id, rpc_host, rpc_path);
+  public shared(msg) func my_role() : async Nat {
+    MemberCache.get_role(zone_members, msg.caller);
   };
 
-  public shared func get_zone_member_role(member_address : Text) : async Nat {
-    await Oracle.get_zone_member_role(zone_id, member_address, rpc_host, rpc_path);
+  public shared query func get_role(member : Principal) : async Nat {
+    MemberCache.get_role(zone_members, member);
+  };
+
+  public shared(msg) func update_my_role() : async () {
+    Debug.print(debug_show("Updating role for " # Principal.toText(msg.caller)));
+    await MemberCache.update_member(zone_members, msg.caller);
   };
 
   public shared func test_record_output() : async ((Nat32, Nat32)) {
@@ -82,5 +87,4 @@ shared (_init_msg) actor class Main(
     let (a, b) = record;
     a + b;
   };
-
 };

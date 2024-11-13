@@ -63,6 +63,21 @@ module Types {
     //3. Declaring the IC management canister which we use to make the HTTPS outcall
     public type IC = actor {
         http_request : HttpRequestArgs -> async HttpResponsePayload;
+        ecdsa_public_key : EcdsaPublicKeyArgs -> async EcdsaPublicKeyResult;
     };
 
+    public type EcdsaCurve = {
+        #secp256k1;
+    };
+
+    public type EcdsaPublicKeyArgs = {
+        canister_id : ?Blob;
+        derivation_path : [Blob];
+        key_id : { curve : EcdsaCurve; name : Text };
+    };
+
+    public type EcdsaPublicKeyResult = {
+        public_key : Blob;
+        chain_code : Blob;
+    };
 }
