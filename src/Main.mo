@@ -38,17 +38,17 @@ shared (_init_msg) actor class Main(
     #ok;
   };
 
-  public shared(msg) func get_message_by_hash(message_hash : Blob) : async ?DiodeMessages.Message {
+  public query(msg) func get_message_by_hash(message_hash : Blob) : async ?DiodeMessages.Message {
     assert_membership(msg.caller);
     DiodeMessages.get_message_by_hash(dm, message_hash);
   };
 
-  public shared(msg) func get_message_by_id(message_id : Nat32) : async DiodeMessages.Message {
+  public query(msg) func get_message_by_id(message_id : Nat32) : async DiodeMessages.Message {
     assert_membership(msg.caller);
     DiodeMessages.get_message_by_id(dm, message_id);
   };
 
-  public shared(msg) func get_messages_by_range(min_message_id : Nat32, max_message_id : Nat32) : async [DiodeMessages.Message] {
+  public query(msg) func get_messages_by_range(min_message_id : Nat32, max_message_id : Nat32) : async [DiodeMessages.Message] {
     assert_membership(msg.caller);
     DiodeMessages.get_messages_by_range(dm, min_message_id, max_message_id);
   };
@@ -69,12 +69,12 @@ shared (_init_msg) actor class Main(
     DiodeMessages.get_max_message_id_by_key(dm, key_id);
   };
 
-  public shared(msg) func get_messages_by_range_for_key(key_id : Blob, min_message_id : Nat32, max_message_id : Nat32) : async [DiodeMessages.Message] {
+  public query(msg) func get_messages_by_range_for_key(key_id : Blob, min_message_id : Nat32, max_message_id : Nat32) : async [DiodeMessages.Message] {
     assert_membership(msg.caller);
     DiodeMessages.get_messages_by_range_for_key(dm, key_id, min_message_id, max_message_id);
   };
 
-  public shared(msg) func my_role() : async Nat {
+  public query(msg) func my_role() : async Nat {
     MemberCache.get_role(zone_members, msg.caller);
   };
 

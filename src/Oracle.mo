@@ -5,7 +5,6 @@ import Cycles "mo:base/ExperimentalCycles";
 import Types "Types";
 import Debug "mo:base/Debug";
 import Array "mo:base/Array";
-import Char "mo:base/Char";
 import Iter "mo:base/Iter";
 import Base16 "mo:base16/Base16";
 
