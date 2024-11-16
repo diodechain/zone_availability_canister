@@ -147,7 +147,51 @@ This setup complicates the process of looking up the permission level for the ca
 1) Check whether the provided abstract account address is a member of the zone (`get_zone_member_role` function in the `Oracle.mo` module)
 2) Ensure that the physical device address is part of the abstract account. (`is_identity_member` function in the `Oracle.mo` module)
 
-For this the Canister has a dedicated function `update_identity_role` which first checks the first condition and then the second before updating the member cache with the role value.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Canister
+    participant Oracle
+    participant EVM as EVM Chain
+    participant Zone as Zone Contract
+    participant AA as Account Abstraction Contract
+
+    Client->>Canister: update_identity_role(abstract_account, pubkey)
+    activate Canister
+    
+    Canister->>Oracle: get_zone_member_role(abstract_account)
+    activate Oracle
+    Oracle->>EVM: HTTP Call
+    EVM->>Zone: role(abstract_account)
+    Zone-->>EVM: role_value
+    EVM-->>Oracle: Response
+    Oracle-->>Canister: role_value
+    deactivate Oracle
+
+    alt role_value > 0
+        Canister->>Oracle: is_identity_member(device_address, abstract_account)
+        activate Oracle
+        Oracle->>EVM: HTTP Call
+        EVM->>AA: IsMember(device_address)
+        AA-->>EVM: is_member
+        EVM-->>Oracle: Response
+        Oracle-->>Canister: is_member
+        deactivate Oracle
+
+        alt is_member == true
+            Canister->>Canister: Update member cache
+        else is_member == false
+            Canister-->>Client: Error: Device not in abstract account
+        end
+    else role_value == 0
+        Canister-->>Client: Error: Not a zone member
+    end
+    
+    deactivate Canister
+```
+
+For this the Canister has a dedicated function `update_identity_role` which first checks the first condition and then the second before updating the member cache with the role value as in above diagram.
 
 ### Remote Zone Contract Call `Oracle.mo`
 
