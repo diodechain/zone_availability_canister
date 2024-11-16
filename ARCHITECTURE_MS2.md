@@ -119,20 +119,46 @@ So instead of fetching entire membership lists, when the Canister is created we 
   - Any user who wants to send a message to a zone needs to trigger the fetching of the minimal membership information for that user first.
   - Then the subsequent access to the canister will not have additional latency costs for the cross-chain queries.
 
-## Address Conversion `Eth.mo`
+## Caller Identity Address Conversion to Ethereum Address `Eth.mo`
 
 The ICP supports multiple different Principal types, including Secp256k1 public/private key pairs. The Zone contracts hosted on EVM chains use the Ethereum address as the membership identifier. Thus when calls are made from Zone users to the Diode Message Canister, the Ethereum address needs to be derived from the Principal, so that the permission for that Ethereum address can be checked in the remote zone contract.
 
-This address conversion is done only when the the member cache is updated, and the result is stored in the member cache. Based on the callers Principal received from `public shared(msg) ...` function calls the IC system canisters `ic.ecdsa_public_key` method is used to fetch the public key, and then hashed with Keccak-256 to generate the Ethereum address. This happens in the new `Eth.mo` module.
+This address conversion is done only when the the member cache is updated, and the result is stored in the member cache. 
+
+Motoko Caller Identification:
+```motoko
+public shared(msg) func ... {
+  let caller = msg.caller;
+}
+```
+
+Even though the Motoko Caller Identification provides functions with easy access to the calling Principal the passed principal data is already reduced to the the ICP Identifier only which is a hash of the public key. This data alone cannot be used to derive the Ethereum address.
+
+So instead the member cache update call `update_member` requires the full public key value to be provided as a parameter. This public key value is then converted both into the ICP Identifier and then into the Ethereum address. Then this Ethereum address is used to make the external cross-chain query and the response is stored under the ICP Identifier in the member cache.
+
+This allows followup calls to the canister to use the ICP Identifier to quickly look up the permission level in the member cache without having to perform the public key to Ethereum address conversion again.
+
+### Account Abstraction
+
+Diode Zone uses account abstraction for most users. For example if a user of the Diode application is using two devices, a Phone and a Laptop, the user will use the same abstract account across these devices. The account abstraction is done by another Ethereum wallet contract in which each physical device is represented as a different Ethereum address. 
+
+This setup complicates the process of looking up the permission level for the caller of the Canister methods somewhat. Instead of checking only the Zone smart contract for address membership, now we need two checks:
+
+1) Check whether the provided abstract account address is a member of the zone (`get_zone_member_role` function in the `Oracle.mo` module)
+2) Ensure that the physical device address is part of the abstract account. (`is_identity_member` function in the `Oracle.mo` module)
+
+For this the Canister has a dedicated function `update_identity_role` which first checks the first condition and then the second before updating the member cache with the role value.
 
 ### Remote Zone Contract Call `Oracle.mo`
 
-The derived Ethereum address is then used to call the Zone contract on an external EVM chain. The Solidity function `role(address user)` is called to check if the user has the necessary permissions. This happens in the `Oracle.mo` module. 
+In the case of a Zone membership check the derived Ethereum address is used to call the Zone contract on an external EVM chain. The Solidity function `role(address user)` is called to check if the user has the necessary permissions. This happens in the `Oracle.mo` module. 
 
 As Zones can be hosted on different EVM chains the Diode Canister is now receiving addition constructor arguments 
     - zone_id : Hex string of the Zone smart contract address
     - rpc_host : URL of the EVM chain RPC host
     - rpc_path : Any subpath after the host, for example `/api/<key>/` if needed
+
+The same mechanism is used to check if a physical device address is part of the abstract account. Using the `is_identity_member` function in the `Oracle.mo` module. Which calls the `IsMember(address)` function in the account abstraction contract cross chain.
 
 ## Cache invalidation
 
