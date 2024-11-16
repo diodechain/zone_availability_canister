@@ -17,6 +17,7 @@ module MemberCache {
 
     public type CacheEntry = {
         role : Nat;
+        identity_contract : ?Blob;
         timestamp : Int;
     };
 
@@ -29,22 +30,65 @@ module MemberCache {
         };
     };
 
-    public func update_member(cache : Cache, member : Principal) : async () {
-        Debug.print(debug_show("Fetching eth address for member " # Principal.toText(member)));
-        switch (await Eth.addressFromPrincipal(member)) {
+    public func update_identity_member(cache : Cache, member_pubkey : Blob, identity_contract : Blob) : async Nat {
+        if (identity_contract.size() != 20) {
+            Debug.trap("Invalid identity contract size: " # debug_show (identity_contract.size()));
+        };
+
+        if (member_pubkey.size() != 65) {
+            Debug.trap("Invalid public key size: " # debug_show (member_pubkey.size()));
+        };
+
+        let member = Eth.principalFromPublicKey(member_pubkey);
+        let address = Eth.addressFromPublicKey(member_pubkey);
+        let address_hex = Base16.encode(address);
+
+        let identity_contract_hex = Base16.encode(identity_contract);
+        let is_member = await Oracle.is_identity_member("0x" # identity_contract_hex, address_hex, cache.rpc_host, cache.rpc_path);
+
+        if (not is_member) {
+            Debug.trap("Member is not in identity");
+        };
+
+        let role = await Oracle.get_zone_member_role(cache.zone_id, identity_contract_hex, cache.rpc_host, cache.rpc_path);
+        return set_identity_member(cache, member, role, ?identity_contract);
+    };
+
+    public func update_member(cache : Cache, member_pubkey : Blob) : async Nat {
+        if (member_pubkey.size() != 65) {
+            Debug.trap("Invalid public key size: " # debug_show (member_pubkey.size()));
+        };
+
+        let member = Eth.principalFromPublicKey(member_pubkey);
+        let address = Eth.addressFromPublicKey(member_pubkey);
+        let address_hex = Base16.encode(address);
+
+        let role = await Oracle.get_zone_member_role(cache.zone_id, address_hex, cache.rpc_host, cache.rpc_path);
+        return set_identity_member(cache, member, role, null);
+    };
+
+    func set_identity_member(cache : Cache, member : Principal, role : Nat, identity_contract : ?Blob) : Nat {
+        // This code ensure that identity contract hex is not changed after it is set
+        // this ensures that public calls to update_member() are not able to unset the cached proper role
+        // by supplying a different identity contract hex
+        let key = Principal.toBlob(member);
+        switch (Map.get<Blob, CacheEntry>(cache.zone_members, Map.bhash, key)) {
             case (null) {
-                return;
+                Map.set<Blob, CacheEntry>(cache.zone_members, Map.bhash, key, { role = role; timestamp = Time.now(); identity_contract = identity_contract });
             };
-            case (?address) {
-                let address_hex = Base16.encode(address);
-                Debug.print(debug_show(address_hex));
-                let role = await Oracle.get_zone_member_role(cache.zone_id, address_hex, cache.rpc_host, cache.rpc_path);
-                Debug.print(debug_show(role));
-                let key = Principal.toBlob(member);
-                Map.set<Blob, CacheEntry>(cache.zone_members, Map.bhash, key, { role = role; timestamp = Time.now() });
-                return;
+            case (?entry) {
+                if (entry.identity_contract == identity_contract) {
+                    Map.set<Blob, CacheEntry>(cache.zone_members, Map.bhash, key, { role = role; timestamp = Time.now(); identity_contract = identity_contract });
+                } else {
+                    Debug.trap("Identity contract hex mismatch");
+                };
             };
         };
+        return role;
+    };
+
+    public func set_member(cache : Cache, member : Principal, role : Nat) : Nat {
+        return set_identity_member(cache, member, role, null);
     };
 
     public func get_member(cache : Cache, member : Principal) : ?CacheEntry {

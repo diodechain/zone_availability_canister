@@ -10,8 +10,11 @@ import Iter "mo:base/Iter";
 import Base16 "mo:base16/Base16";
 
 module DiodeOracle {
+    func create_request(to: Text, data: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
+        if (to.size() != 42) {
+            Debug.trap("Invalid 'to' address size: " # debug_show (to.size()));
+        };
 
-    func create_zone_request(zone_id: Text, data: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
         let request_headers = [
             { name = "Host"; value = rpc_host },
             { name = "User-Agent"; value = "diode_oracle_canister" },
@@ -19,7 +22,7 @@ module DiodeOracle {
         ];
 
         let url = "https://" # rpc_host # rpc_path;
-        let text = Text.encodeUtf8("{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"eth_call\", \"params\": [{\"to\": \"" # zone_id # "\", \"data\": \"" # data # "\"}, \"latest\"]}");
+        let text = Text.encodeUtf8("{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"eth_call\", \"params\": [{\"to\": \"" # to # "\", \"data\": \"" # data # "\"}, \"latest\"]}");
 
         {
             url = url;
@@ -32,12 +35,20 @@ module DiodeOracle {
     };
 
     public func create_member_list_request(zone_id: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
-        create_zone_request(zone_id, "0x6bb04b86", rpc_host, rpc_path);
+        // members()
+        create_request(zone_id, "0x6bb04b86", rpc_host, rpc_path);
     };
 
     public func create_member_role_request(zone_id: Text, member_address: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
+        // role(address)
         let call = "0xd4322d7d000000000000000000000000" # member_address;
-        create_zone_request(zone_id, call, rpc_host, rpc_path);
+        create_request(zone_id, call, rpc_host, rpc_path);
+    };
+
+    public func create_identity_member_request(identity_contract_address: Text, member_address: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
+        // IsMember(address)
+        let call = "0x264560d6000000000000000000000000" # member_address;
+        create_request(identity_contract_address, call, rpc_host, rpc_path);
     };
 
     public func http_actor() : Types.IC {
@@ -49,20 +60,17 @@ module DiodeOracle {
         let body = http_response.body;
         // "result":
         let needle : [Nat8] = [34, 114, 101, 115, 117, 108, 116, 34, 58, 34, 48, 120];
-        Debug.print(debug_show (body));
+        Debug.print(debug_show (Text.decodeUtf8(Blob.fromArray(body))));
         let begin = search(body, 0, needle, 0);
-        Debug.print(debug_show (begin));
         if (begin == 0) {
             null
         } else {
             let end = Array.nextIndexOf<Nat8>(34, body, begin, Nat8.equal);
-            Debug.print(debug_show (end));
             
             switch (end) {
                 case null { null };
                 case (?end) {
                     let result = Iter.toArray(Array.slice<Nat8>(body, begin + 1, end));
-                    Debug.print(debug_show (result));
                     switch (Text.decodeUtf8(Blob.fromArray(result))) {
                         case (null) { null };
                         case (?text) { Base16.decode(text) };
@@ -93,13 +101,7 @@ module DiodeOracle {
         number;
     };
 
-    public func get_zone_members(zone_id: Text, rpc_host: Text, rpc_path: Text) : async ?Blob {
-        let request = create_member_list_request(zone_id, rpc_host, rpc_path);
-        Cycles.add<system>(20_949_972_000);
-        let response = await http_actor().http_request(request);
-        return process_http_response(response);
-    };
-
+    
     public func get_zone_member_role(zone_id: Text, member_address: Text, rpc_host: Text, rpc_path: Text) : async Nat {
         let request = create_member_role_request(zone_id, member_address, rpc_host, rpc_path);
         Cycles.add<system>(20_949_972_000);
@@ -109,5 +111,14 @@ module DiodeOracle {
             case (?blob) { blob_to_nat(blob) };
         };
     };
-
+    
+    public func is_identity_member(identity_contract_address: Text, member_address: Text, rpc_host: Text, rpc_path: Text) : async Bool {
+        let request = create_identity_member_request(identity_contract_address, member_address, rpc_host, rpc_path);
+        Cycles.add<system>(20_949_972_000);
+        let response = await http_actor().http_request(request);
+        switch (process_http_response(response)) {
+            case (null) { false };
+            case (?blob) { blob_to_nat(blob) == 1 };
+        };
+    };
 };

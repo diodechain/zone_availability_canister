@@ -43,7 +43,7 @@ defmodule Test do
 
       System.at_exit(fn _ -> System.cmd("kill", ["#{pid}"]) end)
       await_service()
-      {_, 0} = System.cmd("dfx", ["deploy"])
+      {_, 0} = System.cmd("bash", ["deploy.sh"])
     end
   end
 
@@ -330,8 +330,9 @@ defmodule Test do
       })
       |> DiodeClient.Base16.encode()
 
-    w = Wallet.new()
+    w = Wallet.from_privkey(DiodeClient.Base16.decode("0xb6dbce9418872c4b8f5a10a5778e247c60cdb0265f222c0bfdbe565cfe63d64a"))
     IO.puts("wallet_textual: #{wallet_textual(w)}")
+    IO.puts("wallet_address: #{Wallet.printable(w)}")
     canister_id = default_canister_id()
 
     [{0, 1}] = call(canister_id, w, "test_record_output", [], [])
@@ -339,6 +340,8 @@ defmodule Test do
     [3] =
       call(canister_id, w, "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
 
+    identity_contract = DiodeClient.Base16.decode("0x08ff68fe9da498223d4fc953bc4c336ec5726fec")
+    [200] = call(canister_id, w, "update_identity_role", [:blob, :blob], [Wallet.pubkey_long!(w), identity_contract])
     # test_batch_write(w, canister_id)
 
     %{"certified_height" => height, "replica_health_status" => "healthy", "root_key" => root_key} =
