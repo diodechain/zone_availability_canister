@@ -18,8 +18,8 @@ jobs:
       - name: make sure moc is installed
         run: mops toolchain bin moc || mops toolchain use moc latest
 
-      - name: install dfx
-        run: sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+      - name: install deps
+        run: mops install
 
       - name: run tests
-        run: mops test
+        run: mops test --replica pocket-ic
