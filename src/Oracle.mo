@@ -9,7 +9,7 @@ import Iter "mo:base/Iter";
 import Base16 "mo:base16/Base16";
 
 module DiodeOracle {
-    func create_request(to: Text, data: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
+    func create_request(to : Text, data : Text, rpc_host : Text, rpc_path : Text) : Types.HttpRequestArgs {
         if (to.size() != 42) {
             Debug.trap("Invalid 'to' address size: " # debug_show (to.size()));
         };
@@ -33,18 +33,18 @@ module DiodeOracle {
         };
     };
 
-    public func create_member_list_request(zone_id: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
+    public func create_member_list_request(zone_id : Text, rpc_host : Text, rpc_path : Text) : Types.HttpRequestArgs {
         // members()
         create_request(zone_id, "0x6bb04b86", rpc_host, rpc_path);
     };
 
-    public func create_member_role_request(zone_id: Text, member_address: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
+    public func create_member_role_request(zone_id : Text, member_address : Text, rpc_host : Text, rpc_path : Text) : Types.HttpRequestArgs {
         // role(address)
         let call = "0xd4322d7d000000000000000000000000" # member_address;
         create_request(zone_id, call, rpc_host, rpc_path);
     };
 
-    public func create_identity_member_request(identity_contract_address: Text, member_address: Text, rpc_host: Text, rpc_path: Text) : Types.HttpRequestArgs {
+    public func create_identity_member_request(identity_contract_address : Text, member_address : Text, rpc_host : Text, rpc_path : Text) : Types.HttpRequestArgs {
         // IsMember(address)
         let call = "0x264560d6000000000000000000000000" # member_address;
         create_request(identity_contract_address, call, rpc_host, rpc_path);
@@ -55,17 +55,17 @@ module DiodeOracle {
         return ic;
     };
 
-    public func process_http_response(http_response: Types.HttpResponsePayload) : ?Blob {
+    public func process_http_response(http_response : Types.HttpResponsePayload) : ?Blob {
         let body = http_response.body;
         // "result":
         let needle : [Nat8] = [34, 114, 101, 115, 117, 108, 116, 34, 58, 34, 48, 120];
         Debug.print(debug_show (Text.decodeUtf8(Blob.fromArray(body))));
         let begin = search(body, 0, needle, 0);
         if (begin == 0) {
-            null
+            null;
         } else {
             let end = Array.nextIndexOf<Nat8>(34, body, begin, Nat8.equal);
-            
+
             switch (end) {
                 case null { null };
                 case (?end) {
@@ -79,7 +79,7 @@ module DiodeOracle {
         };
     };
 
-    func search(body: [Nat8], body_start: Nat, needle: [Nat8], search_start: Nat) : Nat {
+    func search(body : [Nat8], body_start : Nat, needle : [Nat8], search_start : Nat) : Nat {
         if (body_start >= body.size()) {
             return 0;
         };
@@ -94,14 +94,36 @@ module DiodeOracle {
         };
     };
 
-    func blob_to_nat(blob: Blob) : Nat {
+    func blob_to_nat(blob : Blob) : Nat {
         let array = Blob.toArray(blob);
-        let number = Array.foldLeft<Nat8, Nat>(array, 0, func (acc, byte) { acc * 256 + Nat8.toNat(byte) });
+        let number = Array.foldLeft<Nat8, Nat>(array, 0, func(acc, byte) { acc * 256 + Nat8.toNat(byte) });
         number;
     };
 
-    
-    public func get_zone_member_role(zone_id: Text, member_address: Text, rpc_host: Text, rpc_path: Text) : async Nat {
+    // This function doesn't work for large zones and it's only used in tests.
+    public func get_zone_members(zone_id : Text, rpc_host : Text, rpc_path : Text) : async [Blob] {
+        let request = create_member_list_request(zone_id, rpc_host, rpc_path);
+        Cycles.add<system>(20_949_972_000);
+        let response = await http_actor().http_request(request);
+        switch (process_http_response(response)) {
+            case (null) { [] };
+            case (?blob) {
+                let array = Blob.toArray(blob);
+                let entries = Array.tabulate<Blob>(
+                    array.size() / 32,
+                    func(i) {
+                        Blob.fromArray(Array.subArray<Nat8>(array, i * 32, 32));
+                    },
+                );
+
+                if (entries.size() < 2) { [] } else {
+                    Array.subArray<Blob>(entries, 2, entries.size() - 2);
+                };
+            };
+        };
+    };
+
+    public func get_zone_member_role(zone_id : Text, member_address : Text, rpc_host : Text, rpc_path : Text) : async Nat {
         let request = create_member_role_request(zone_id, member_address, rpc_host, rpc_path);
         Cycles.add<system>(20_949_972_000);
         let response = await http_actor().http_request(request);
@@ -110,8 +132,8 @@ module DiodeOracle {
             case (?blob) { blob_to_nat(blob) };
         };
     };
-    
-    public func is_identity_member(identity_contract_address: Text, member_address: Text, rpc_host: Text, rpc_path: Text) : async Bool {
+
+    public func is_identity_member(identity_contract_address : Text, member_address : Text, rpc_host : Text, rpc_path : Text) : async Bool {
         let request = create_identity_member_request(identity_contract_address, member_address, rpc_host, rpc_path);
         Cycles.add<system>(20_949_972_000);
         let response = await http_actor().http_request(request);
