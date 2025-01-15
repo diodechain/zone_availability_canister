@@ -5,18 +5,23 @@ import DiodeMessages "./DiodeMessages";
 import MemberCache "./MemberCache";
 import Principal "mo:base/Principal";
 import Debug "mo:base/Debug";
+import CyclesRequester "mo:cycles-manager/CyclesRequester";
+import CyclesManager "mo:cycles-manager/CyclesManager";
 
 shared (_init_msg) actor class Main(
   _args : {
     zone_id : Text;
     rpc_host : Text;
     rpc_path : Text;
+    cycles_requester_id : Principal;
   }
 ) = this {
   stable var dm : DiodeMessages.MessageStore = DiodeMessages.new();
   stable var zone_members : MemberCache.Cache = MemberCache.new(_args. zone_id, _args.rpc_host, _args.rpc_path);
+  stable var cycles_requester: CyclesRequester.CyclesRequester = CyclesRequester.new(_args.cycles_requester_id);
 
   public shared(msg) func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<(), Text> {
+    await request_topup_if_low();
     assert_membership(msg.caller);
 
     let hash = Sha256.fromBlob(#sha256, ciphertext);
@@ -24,6 +29,7 @@ shared (_init_msg) actor class Main(
   };
 
   public shared(msg) func add_messages(messages : [(Blob, Blob)]) : async Result.Result<(), Text> {
+    await request_topup_if_low();
     assert_membership(msg.caller);
 
     for ((key_id, ciphertext) in messages.vals()) {
@@ -83,10 +89,12 @@ shared (_init_msg) actor class Main(
   };
 
   public func update_role(public_key : Blob) : async Nat {
+    await request_topup_if_low();
     await MemberCache.update_member(zone_members, public_key);
   };
 
   public func update_identity_role(public_key : Blob, identity_contract_address : Blob) : async Nat {
+    await request_topup_if_low();
     await MemberCache.update_identity_member(zone_members, public_key, identity_contract_address);
   };
 
@@ -96,6 +104,11 @@ shared (_init_msg) actor class Main(
       Debug.print("Not a member of the zone");
       assert false;
     };
+  };
+
+  // From https://github.com/CycleOperators/cycles-manager/blob/main/example/Child.mo
+  func request_topup_if_low(): async* CyclesManager.TransferCyclesResult {
+    await* CyclesRequester.requestTopupIfBelowThreshold(cycles_requester);
   };
 
   public shared func test_record_output() : async ((Nat32, Nat32)) {

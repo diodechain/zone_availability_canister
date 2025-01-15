@@ -1,13 +1,13 @@
 [dependencies]
-base = "0.13.2"
+base = "0.13.5"
 map = "9.0.1"
 sha2 = "0.1.0"
 base16 = "1.0.0"
 sha3 = "0.1.1"
+cycles-manager = "https://github.com/CycleOperators/cycles-manager#master@da19c675032aa418b069e979d9f391a36c053a9c"
 
 [dev-dependencies]
 test = "2.0.0"
-fuzz = "0.2.1"
 bench = "1.0.0"
 
 [toolchain]
