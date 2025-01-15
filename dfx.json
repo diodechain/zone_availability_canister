@@ -1,9 +1,9 @@
 {
   "version": 1,
   "canisters": {
-    "DiodeMessages": {
+    "CanisterFactory": {
       "type": "motoko",
-      "main": "src/Main.mo"
+      "main": "src/CanisterFactory.mo"
     }
   },
   "defaults": {

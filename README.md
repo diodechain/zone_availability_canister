@@ -54,3 +54,10 @@ This project requires an installation of:
 $ cd diode_messages
 $ mops test
 ```
+
+### Local Development & Debugging
+
+```shell
+$ dfx start --background
+$ dfx deploy
+```

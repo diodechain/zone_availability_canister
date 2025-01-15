@@ -5,10 +5,11 @@ import DiodeMessages "./DiodeMessages";
 import MemberCache "./MemberCache";
 import Principal "mo:base/Principal";
 import Debug "mo:base/Debug";
+import Cycles "mo:base/ExperimentalCycles";
 import CyclesRequester "mo:cycles-manager/CyclesRequester";
 import CyclesManager "mo:cycles-manager/CyclesManager";
 
-shared (_init_msg) actor class Main(
+shared (_init_msg) actor class ZoneAvailabilityCanister(
   _args : {
     zone_id : Text;
     rpc_host : Text;
@@ -18,10 +19,19 @@ shared (_init_msg) actor class Main(
 ) = this {
   stable var dm : DiodeMessages.MessageStore = DiodeMessages.new();
   stable var zone_members : MemberCache.Cache = MemberCache.new(_args. zone_id, _args.rpc_host, _args.rpc_path);
-  stable var cycles_requester: CyclesRequester.CyclesRequester = CyclesRequester.new(_args.cycles_requester_id);
+
+  // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
+  // When below 10 trillion cycles, topup by 1 trillion
+  stable var cycles_requester: CyclesRequester.CyclesRequester = CyclesRequester.init({
+    batteryCanisterPrincipal = _args.cycles_requester_id;
+    topupRule = {
+      threshold = 10_000_000_000_000;
+      method = #by_amount(1_000_000_000_000);
+    };
+  });
 
   public shared(msg) func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<(), Text> {
-    await request_topup_if_low();
+    ignore await* request_topup_if_low();
     assert_membership(msg.caller);
 
     let hash = Sha256.fromBlob(#sha256, ciphertext);
@@ -29,7 +39,7 @@ shared (_init_msg) actor class Main(
   };
 
   public shared(msg) func add_messages(messages : [(Blob, Blob)]) : async Result.Result<(), Text> {
-    await request_topup_if_low();
+    ignore await* request_topup_if_low();
     assert_membership(msg.caller);
 
     for ((key_id, ciphertext) in messages.vals()) {
@@ -89,12 +99,12 @@ shared (_init_msg) actor class Main(
   };
 
   public func update_role(public_key : Blob) : async Nat {
-    await request_topup_if_low();
+    ignore await* request_topup_if_low();
     await MemberCache.update_member(zone_members, public_key);
   };
 
   public func update_identity_role(public_key : Blob, identity_contract_address : Blob) : async Nat {
-    await request_topup_if_low();
+    ignore await* request_topup_if_low();
     await MemberCache.update_identity_member(zone_members, public_key, identity_contract_address);
   };
 
