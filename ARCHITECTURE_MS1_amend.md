@@ -56,9 +56,9 @@ growth beyond limits.
 | ----------- | ------- | ------------------------------------------------------------------- |
 | id          | uint32  | auto incremented integer and unique id of this message              |
 | timestamp   | uint32  | unix timestamp of the insertion into the canister                   |
-| key_id      | bytes20 | ethereum address hash of the destination key                        |
+| key_id      | bytes41 | group_id of the destination group                                   |
 | next_id     | uint32  | id of the next message in the linked list for this key_id           |
-| prev_id     | uint32  | id of the previous message in the linked list for this key_id      |
+| prev_id     | uint32  | id of the previous message in the linked list for this key_id       |
 | hash        | bytes32 | sha256 hash of the cipher_text                                      |
 | offset      | uint64  | offset of the message payload in the `payload_region`               |
 | len         | uint32  | length of the message payload in the `payload_region`               |
@@ -71,7 +71,7 @@ erDiagram
     %% HEAP Maps
     KEY_INBOX_MAP ||--o{ INBOX : maps
     KEY_INBOX_MAP {
-        bytes20 key_id
+        bytes41 key_id
         uint32 min_msg_id
         uint32 max_msg_id
     }
@@ -86,7 +86,7 @@ erDiagram
     INBOX {
         uint32 message_id
         uint32 timestamp
-        bytes20 destination
+        bytes41 destination
         bytes32 hash
         uint32 next_msg_id
         uint32 prev_msg_id

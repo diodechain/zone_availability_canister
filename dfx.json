@@ -4,6 +4,10 @@
     "CanisterFactory": {
       "type": "motoko",
       "main": "src/CanisterFactory.mo"
+    },
+    "ZoneAvailabilityCanister": {
+      "type": "motoko",
+      "main": "src/ZoneAvailabilityCanister.mo"
     }
   },
   "defaults": {

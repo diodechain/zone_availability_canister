@@ -1,8 +1,10 @@
-import { trap } "mo:base/Debug";
-import Principal "mo:base/Principal";
 import { endsWith; size } "mo:base/Text";
+import { trap } "mo:base/Debug";
+import Cycles "mo:base/ExperimentalCycles";
 import CyclesManager "mo:cycles-manager/CyclesManager";
+import Principal "mo:base/Principal";
 import ZoneAvailabilityCanister "ZoneAvailabilityCanister";
+
 
 // A simple battery canister actor example that implements the cycles_manager_transferCycles API of the CyclesManager.Interface 
 
@@ -43,31 +45,33 @@ actor CanisterFactory {
     result;
   };
 
-  // A very basic example of adding a canister to the cycles manager
+  // Creating a new zone availability canister
   // This adds a canister with a 1 trillion cycles allowed per 24 hours cycles quota
-  //
-  // IMPORTANT: Add authoriation for production implementation so that not just any canister
-  // can add themself
   public shared func create_zone_availability_canister(
     zone_id : Text,
     rpc_host : Text,
-    rpc_path : Text,
-    cycles_requester_id : Principal
-  ) {
+    rpc_path : Text
+  ) : async Principal {
+
+    Cycles.add<system>(1_000_000_000_000);
     let canister = await ZoneAvailabilityCanister.ZoneAvailabilityCanister({
       zone_id;
       rpc_host;
       rpc_path;
-      cycles_requester_id;
+      cycles_requester_id = Principal.fromActor(CanisterFactory);
     });
 
-    CyclesManager.addChildCanister(cyclesManager, Principal.fromActor(canister), {
+    let principal = Principal.fromActor(canister);
+
+    CyclesManager.addChildCanister(cyclesManager, principal, {
       // This topup rule allows 1 Trillion cycles every 24 hours
       quota = ?(#rate({
         maxAmount = 1_000_000_000_000;
         durationInSeconds = 24 * 60 * 60;
       }));
-    })
+    });
+
+    principal;
   };
 
 
@@ -78,5 +82,9 @@ actor CanisterFactory {
     and
     // Canister principals end with "-cai"
     endsWith(principal_text, #text "-cai");
+  };
+
+  public query func get_cycles_balance() : async Nat {
+    Cycles.balance();
   };
 }

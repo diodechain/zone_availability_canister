@@ -1,6 +1,6 @@
 #!/usr/bin/env elixir
 Mix.install([
-  {:candid, "~> 1.0"},
+  {:candid, "~> 1.0.1"},
   {:diode_client, "~> 1.0"},
   {:cbor, "~> 1.0"},
   {:jason, "~> 1.4"},
@@ -43,7 +43,21 @@ defmodule Test do
 
       System.at_exit(fn _ -> System.cmd("kill", ["#{pid}"]) end)
       await_service()
-      {_, 0} = System.cmd("bash", ["deploy.sh"])
+
+      {_, 0} =
+        System.cmd("dfx", [
+          "deploy",
+          "ZoneAvailabilityCanister",
+          "--argument",
+          """
+          record {
+            zone_id = "0xcd0afb71cb7ea9d16c719869682a399428eec34a";
+            rpc_host = "prenet.diode.io:8443";
+            rpc_path = "/";
+            cycles_requester_id = principal "be2us-64aaa-aaaaa-qaabq-cai";
+          }
+          """
+        ])
     end
   end
 
@@ -330,7 +344,13 @@ defmodule Test do
       })
       |> DiodeClient.Base16.encode()
 
-    w = Wallet.from_privkey(DiodeClient.Base16.decode("0xb6dbce9418872c4b8f5a10a5778e247c60cdb0265f222c0bfdbe565cfe63d64a"))
+    w =
+      Wallet.from_privkey(
+        DiodeClient.Base16.decode(
+          "0xb6dbce9418872c4b8f5a10a5778e247c60cdb0265f222c0bfdbe565cfe63d64a"
+        )
+      )
+
     IO.puts("wallet_textual: #{wallet_textual(w)}")
     IO.puts("wallet_address: #{Wallet.printable(w)}")
     canister_id = default_canister_id()
@@ -341,7 +361,13 @@ defmodule Test do
       call(canister_id, w, "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
 
     identity_contract = DiodeClient.Base16.decode("0x08ff68fe9da498223d4fc953bc4c336ec5726fec")
-    [200] = call(canister_id, w, "update_identity_role", [:blob, :blob], [Wallet.pubkey_long!(w), identity_contract])
+
+    [200] =
+      call(canister_id, w, "update_identity_role", [:blob, :blob], [
+        Wallet.pubkey_long!(w),
+        identity_contract
+      ])
+
     # test_batch_write(w, canister_id)
 
     %{"certified_height" => height, "replica_health_status" => "healthy", "root_key" => root_key} =
@@ -353,13 +379,13 @@ defmodule Test do
     [n] = query(canister_id, w, "get_max_message_id")
 
     message = "hello diode #{n}"
-    key_id = Wallet.address!(w)
+    key_id = make_key(w)
     isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
     n2 = n + 1
     [^n2] = query(canister_id, w, "get_max_message_id")
 
     message = "hello diode #{n2}"
-    key_id = Wallet.address!(w)
+    key_id = make_key(w)
     isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
     n3 = n2 + 1
     [^n3] = query(canister_id, w, "get_max_message_id")
@@ -371,7 +397,7 @@ defmodule Test do
   end
 
   def test_batch_write(w, canister_id, size \\ 10) do
-    key_id = Wallet.address!(w)
+    key_id = make_key(w)
     n = System.os_time(:nanosecond)
     type_spec = [{:vec, {:record, [{0, :blob}, {1, :blob}]}}]
 
@@ -390,6 +416,12 @@ defmodule Test do
 
     ^size = length(messages)
     messages
+  end
+
+  def make_key(wallet) do
+    addr = Wallet.address!(wallet)
+    size = byte_size(addr)
+    <<size, addr::binary-size(20), 0::unsigned-size(20*8)>>
   end
 
   def isOk([{tag, nil}]) do
