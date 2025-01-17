@@ -1,13 +1,14 @@
-import Result "mo:base/Result";
-import Nat32 "mo:base/Nat32";
-import Sha256 "mo:sha2/Sha256";
+import Array "mo:base/Array";
+import Cycles "mo:base/ExperimentalCycles";
+import CyclesManager "mo:cycles-manager/CyclesManager";
+import CyclesRequester "mo:cycles-manager/CyclesRequester";
+import Debug "mo:base/Debug";
 import DiodeMessages "./DiodeMessages";
 import MemberCache "./MemberCache";
+import Nat32 "mo:base/Nat32";
 import Principal "mo:base/Principal";
-import Debug "mo:base/Debug";
-import Cycles "mo:base/ExperimentalCycles";
-import CyclesRequester "mo:cycles-manager/CyclesRequester";
-import CyclesManager "mo:cycles-manager/CyclesManager";
+import Result "mo:base/Result";
+import Sha256 "mo:sha2/Sha256";
 
 shared (_init_msg) actor class ZoneAvailabilityCanister(
   _args : {
@@ -19,6 +20,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 ) = this {
   stable var dm : DiodeMessages.MessageStore = DiodeMessages.new();
   stable var zone_members : MemberCache.Cache = MemberCache.new(_args. zone_id, _args.rpc_host, _args.rpc_path);
+  stable var zone_id : Text = _args.zone_id;
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below 10 trillion cycles, topup by 1 trillion
@@ -30,7 +32,11 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     };
   });
 
-  public shared(msg) func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<(), Text> {
+  public query func get_zone_id() : async Text {
+    zone_id;
+  };
+
+  public shared(msg) func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
     ignore await* request_topup_if_low();
     assert_membership(msg.caller);
 
@@ -38,9 +44,10 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     DiodeMessages.add_message(dm, key_id, hash, ciphertext);
   };
 
-  public shared(msg) func add_messages(messages : [(Blob, Blob)]) : async Result.Result<(), Text> {
+  public shared(msg) func add_messages(messages : [(Blob, Blob)]) : async Result.Result<[Nat32], Text> {
     ignore await* request_topup_if_low();
     assert_membership(msg.caller);
+    var message_ids : [Nat32] = [];
 
     for ((key_id, ciphertext) in messages.vals()) {
       let hash = Sha256.fromBlob(#sha256, ciphertext);
@@ -48,10 +55,12 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
         case (#err(e)) {
           return #err(e);
         };
-        case (#ok) {};
+        case (#ok(message_id)) {
+          message_ids := Array.append(message_ids, [message_id]);
+        };
       };
     };
-    #ok;
+    #ok(message_ids);
   };
 
   public query(msg) func get_message_by_hash(message_hash : Blob) : async ?DiodeMessages.Message {
@@ -111,8 +120,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   func assert_membership(member : Principal) {
     let role = MemberCache.get_role(zone_members, member);
     if (role == 0) {
-      Debug.print("Not a member of the zone");
-      assert false;
+      Debug.trap("Not a member of the zone");
     };
   };
 

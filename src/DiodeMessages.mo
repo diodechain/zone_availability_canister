@@ -48,13 +48,18 @@ module DiodeMessages {
   };
 
 
-  public func add_message(store: MessageStore, key_id: Blob, hash: Blob, ciphertext: Blob) : Result.Result<(), Text> {
+  public func add_message(store: MessageStore, key_id: Blob, hash: Blob, ciphertext: Blob) : Result.Result<Nat32, Text> {
     if (key_id.size() != 41) {
       return #err("key_id must be 41 bytes");
     };
 
-    if (Map.has<Blob, Nat32>(store.message_index, Map.bhash, hash)) {
-      return #ok;
+    switch (Map.get<Blob, Nat32>(store.message_index, Map.bhash, hash)) {
+      case (null) { 
+        // passthrough
+      };
+      case (?value) {
+        return #ok(value);
+      };
     };
 
     if (hash.size() != 32) {
@@ -120,7 +125,7 @@ module DiodeMessages {
     // END: Insert message into inbox
 
     store.inbox_index += 1;
-    return #ok;
+    return #ok(store.inbox_index - 1);
   };
 
   private func get_message_offset_by_hash(store: MessageStore, message_hash: Blob) : ?Nat64 {
