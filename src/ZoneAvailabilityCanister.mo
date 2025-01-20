@@ -20,7 +20,6 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 ) = this {
   stable var dm : DiodeMessages.MessageStore = DiodeMessages.new();
   stable var zone_members : MemberCache.Cache = MemberCache.new(_args. zone_id, _args.rpc_host, _args.rpc_path);
-  stable var zone_id : Text = _args.zone_id;
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below 10 trillion cycles, topup by 1 trillion
@@ -33,7 +32,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   });
 
   public query func get_zone_id() : async Text {
-    zone_id;
+    zone_members.zone_id;
   };
 
   public shared(msg) func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
