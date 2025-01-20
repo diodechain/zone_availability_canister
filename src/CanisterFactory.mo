@@ -53,6 +53,7 @@ actor CanisterFactory {
     rpc_path : Text
   ) : async Principal {
 
+    // 1 trillion cycles is ~ 1.30 USD
     Cycles.add<system>(1_000_000_000_000);
     let canister = await ZoneAvailabilityCanister.ZoneAvailabilityCanister({
       zone_id;

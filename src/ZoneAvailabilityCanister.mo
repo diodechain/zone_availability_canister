@@ -22,12 +22,12 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   stable var zone_members : MemberCache.Cache = MemberCache.new(_args. zone_id, _args.rpc_host, _args.rpc_path);
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
-  // When below 10 trillion cycles, topup by 1 trillion
+  // When below 1 trillion cycles, topup by .5 trillion (~65 cents)
   stable var cycles_requester: CyclesRequester.CyclesRequester = CyclesRequester.init({
     batteryCanisterPrincipal = _args.cycles_requester_id;
     topupRule = {
-      threshold = 10_000_000_000_000;
-      method = #by_amount(1_000_000_000_000);
+      threshold = 1_000_000_000_000;
+      method = #by_amount(500_000_000_000);
     };
   });
 
