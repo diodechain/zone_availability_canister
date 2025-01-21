@@ -424,13 +424,13 @@ defmodule Test do
     <<size, addr::binary-size(20), 0::unsigned-size(20*8)>>
   end
 
-  def isOk([{tag, nil}]) do
+  def isOk([{tag, _result} = ret]) do
     if tag != Candid.namehash("ok") do
-      raise "Expected ok, got #{tag}"
+      raise "Expected {ok, result}, got #{inspect(ret)}"
     end
   end
 
-  def isOk(other), do: raise("Expected [{ok, nil}] variant, got #{inspect(other)}")
+  def isOk(other), do: raise("Expected [{:ok, ret}] variant, got #{inspect(other)}")
 
   def cbor_bytes(data) do
     %CBOR.Tag{tag: :bytes, value: data}

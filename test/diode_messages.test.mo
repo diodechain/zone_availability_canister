@@ -106,9 +106,9 @@ actor {
     });
   };
 
-  private func isOk(result : Result.Result<(), Text>) : Bool {
+  private func isOk(result : Result.Result<Nat32, Text>) : Bool {
     switch (result) {
-      case (#ok()) {
+      case (#ok(n)) {
         return true;
       };
       case (#err(text)) {
