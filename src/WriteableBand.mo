@@ -1,7 +1,7 @@
-import Nat64 "mo:base/Nat64";
-import Region "mo:base/Region";
 import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
+import Nat64 "mo:base/Nat64";
+import Region "mo:base/Region";
 
 module {
     let page_size : Nat64 = 65536;

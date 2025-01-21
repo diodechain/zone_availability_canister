@@ -1,11 +1,12 @@
-import Map "mo:map/Map";
-import Principal "mo:base/Principal";
-import Blob "mo:base/Blob";
-import Eth "./Eth";
-import Oracle "./Oracle";
-import Time "mo:base/Time";
 import Base16 "mo:base16/Base16";
+import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
+import Error "mo:base/Error";
+import Eth "./Eth";
+import Map "mo:map/Map";
+import Oracle "./Oracle";
+import Principal "mo:base/Principal";
+import Time "mo:base/Time";
 
 module MemberCache {
     public type Cache = {
@@ -13,6 +14,15 @@ module MemberCache {
         rpc_host : Text;
         rpc_path : Text;
         zone_members : Map.Map<Blob, CacheEntry>;
+        transform_function : Oracle.TransformFunction;
+    };
+
+    func context(cache : Cache) : Oracle.Context {
+        {
+            rpc_host = cache.rpc_host;
+            rpc_path = cache.rpc_path;
+            transform_function = cache.transform_function;
+        };
     };
 
     public type CacheEntry = {
@@ -21,22 +31,23 @@ module MemberCache {
         timestamp : Int;
     };
 
-    public func new(zone_id : Text, rpc_host : Text, rpc_path : Text) : Cache {
+    public func new(zone_id : Text, rpc_host : Text, rpc_path : Text, transform_function : Oracle.TransformFunction) : Cache {
         {
             zone_id = zone_id;
             rpc_host = rpc_host;
             rpc_path = rpc_path;
+            transform_function = transform_function;
             zone_members = Map.new();
         };
     };
 
     public func update_identity_member(cache : Cache, member_pubkey : Blob, identity_contract : Blob) : async Nat {
         if (identity_contract.size() != 20) {
-            Debug.trap("Invalid identity contract size: " # debug_show (identity_contract.size()));
+            throw Error.reject("Invalid identity contract size: " # debug_show (identity_contract.size()));
         };
 
         if (member_pubkey.size() != 65) {
-            Debug.trap("Invalid public key size: " # debug_show (member_pubkey.size()));
+            throw Error.reject("Invalid public key size: " # debug_show (member_pubkey.size()));
         };
 
         let member = Eth.principalFromPublicKey(member_pubkey);
@@ -44,26 +55,26 @@ module MemberCache {
         let address_hex = Base16.encode(address);
 
         let identity_contract_hex = Base16.encode(identity_contract);
-        let is_member = await Oracle.is_identity_member("0x" # identity_contract_hex, address_hex, cache.rpc_host, cache.rpc_path);
+        let is_member = await Oracle.is_identity_member(context(cache), "0x" # identity_contract_hex, address_hex);
 
         if (not is_member) {
-            Debug.trap("Member is not in identity");
+            throw Error.reject("Member is not in identity");
         };
 
-        let role = await Oracle.get_zone_member_role(cache.zone_id, identity_contract_hex, cache.rpc_host, cache.rpc_path);
+        let role = await Oracle.get_zone_member_role(context(cache), cache.zone_id, identity_contract_hex);
         return set_identity_member(cache, member, role, ?identity_contract);
     };
 
     public func update_member(cache : Cache, member_pubkey : Blob) : async Nat {
         if (member_pubkey.size() != 65) {
-            Debug.trap("Invalid public key size: " # debug_show (member_pubkey.size()));
+            throw Error.reject("Invalid public key size: " # debug_show (member_pubkey.size()));
         };
 
         let member = Eth.principalFromPublicKey(member_pubkey);
         let address = Eth.addressFromPublicKey(member_pubkey);
         let address_hex = Base16.encode(address);
 
-        let role = await Oracle.get_zone_member_role(cache.zone_id, address_hex, cache.rpc_host, cache.rpc_path);
+        let role = await Oracle.get_zone_member_role(context(cache), cache.zone_id, address_hex);
         return set_identity_member(cache, member, role, null);
     };
 

@@ -96,6 +96,8 @@ The factory canister is responsible for the following:
 Concerns:
 
 - Will having a single factory limit all child canisters to the same subnet? Might this create a bottleneck and if yes how to address it?
+- How to update child contracts
+- Oracle pass through of transform function (because it needs to be a shared actor anchored function instead of just a function)
 
 ## Cycle Management
 

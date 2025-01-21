@@ -1,10 +1,11 @@
-import { endsWith; size } "mo:base/Text";
-import { trap } "mo:base/Debug";
+import {endsWith; size} "mo:base/Text";
+import {trap} "mo:base/Debug";
+import Blob "mo:base/Blob";
 import Cycles "mo:base/ExperimentalCycles";
 import CyclesManager "mo:cycles-manager/CyclesManager";
+import Error "mo:base/Error";
 import Principal "mo:base/Principal";
 import ZoneAvailabilityCanister "ZoneAvailabilityCanister";
-
 
 // A simple battery canister actor example that implements the cycles_manager_transferCycles API of the CyclesManager.Interface 
 
@@ -18,10 +19,10 @@ actor CanisterFactory {
     defaultCyclesSettings = {
       quota = #fixedAmount(500_000_000_000);
     };
-    // Allow an aggregate of 10 trillion cycles to be transferred every 24 hours 
+    // Allow an aggregate of 1 trillion cycles to be transferred every 24 hours (~1.30 USD)
     aggregateSettings = {
       quota = #rate({
-        maxAmount = 10_000_000_000_000;
+        maxAmount = 1_000_000_000_000;
         durationInSeconds = 24 * 60 * 60;
       });
     };

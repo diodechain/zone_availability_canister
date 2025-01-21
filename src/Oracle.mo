@@ -1,53 +1,74 @@
+import Array "mo:base/Array";
+import Base16 "mo:base16/Base16";
 import Blob "mo:base/Blob";
+import Cycles "mo:base/ExperimentalCycles";
+import Debug "mo:base/Debug";
+import Error "mo:base/Error";
+import Iter "mo:base/Iter";
 import Nat8 "mo:base/Nat8";
 import Text "mo:base/Text";
-import Cycles "mo:base/ExperimentalCycles";
 import Types "Types";
-import Debug "mo:base/Debug";
-import Array "mo:base/Array";
-import Iter "mo:base/Iter";
-import Base16 "mo:base16/Base16";
 
 module DiodeOracle {
-    func create_request(to : Text, data : Text, rpc_host : Text, rpc_path : Text) : Types.HttpRequestArgs {
+    public type TransformFunction = shared query Types.TransformArgs -> async Types.HttpResponsePayload;
+
+    public type Context = {
+        rpc_host : Text;
+        rpc_path : Text;
+        transform_function : TransformFunction;
+    };
+
+    public func transform_function(args : Types.TransformArgs) : Types.HttpResponsePayload {
+        // Stripping all headers
+        {
+            status = args.response.status;
+            headers = [];
+            body = args.response.body;
+        };
+    };
+
+    func create_request(context : Context, to : Text, data : Text) : Types.HttpRequestArgs {
         if (to.size() != 42) {
             Debug.trap("Invalid 'to' address size: " # debug_show (to.size()));
         };
 
         let request_headers = [
-            { name = "Host"; value = rpc_host },
+            { name = "Host"; value = context.rpc_host },
             { name = "User-Agent"; value = "diode_oracle_canister" },
             { name = "Content-Type"; value = "application/json" },
         ];
 
-        let url = "https://" # rpc_host # rpc_path;
+        let url = "https://" # context.rpc_host # context.rpc_path;
         let text = Text.encodeUtf8("{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"eth_call\", \"params\": [{\"to\": \"" # to # "\", \"data\": \"" # data # "\"}, \"latest\"]}");
 
         {
             url = url;
-            max_response_bytes = null; //optional for request
+            max_response_bytes = ?1024; //optional for request
             headers = request_headers;
             body = ?Blob.toArray(text);
             method = #post;
-            transform = null;
+            transform = ?{
+                function = context.transform_function;
+                context = Text.encodeUtf8("eth_call");
+            };
         };
     };
 
-    public func create_member_list_request(zone_id : Text, rpc_host : Text, rpc_path : Text) : Types.HttpRequestArgs {
+    public func create_member_list_request(context : Context, zone_id : Text) : Types.HttpRequestArgs {
         // members()
-        create_request(zone_id, "0x6bb04b86", rpc_host, rpc_path);
+        create_request(context, zone_id, "0x6bb04b86");
     };
 
-    public func create_member_role_request(zone_id : Text, member_address : Text, rpc_host : Text, rpc_path : Text) : Types.HttpRequestArgs {
+    public func create_member_role_request(context: Context, zone_id : Text, member_address : Text) : Types.HttpRequestArgs {
         // role(address)
         let call = "0xd4322d7d000000000000000000000000" # member_address;
-        create_request(zone_id, call, rpc_host, rpc_path);
+        create_request(context, zone_id, call);
     };
 
-    public func create_identity_member_request(identity_contract_address : Text, member_address : Text, rpc_host : Text, rpc_path : Text) : Types.HttpRequestArgs {
+    public func create_identity_member_request(context: Context, identity_contract_address : Text, member_address : Text) : Types.HttpRequestArgs {
         // IsMember(address)
         let call = "0x264560d6000000000000000000000000" # member_address;
-        create_request(identity_contract_address, call, rpc_host, rpc_path);
+        create_request(context, identity_contract_address, call);
     };
 
     public func http_actor() : Types.IC {
@@ -100,31 +121,8 @@ module DiodeOracle {
         number;
     };
 
-    // This function doesn't work for large zones and it's only used in tests.
-    public func get_zone_members(zone_id : Text, rpc_host : Text, rpc_path : Text) : async [Blob] {
-        let request = create_member_list_request(zone_id, rpc_host, rpc_path);
-        Cycles.add<system>(20_949_972_000);
-        let response = await http_actor().http_request(request);
-        switch (process_http_response(response)) {
-            case (null) { [] };
-            case (?blob) {
-                let array = Blob.toArray(blob);
-                let entries = Array.tabulate<Blob>(
-                    array.size() / 32,
-                    func(i) {
-                        Blob.fromArray(Array.subArray<Nat8>(array, i * 32, 32));
-                    },
-                );
-
-                if (entries.size() < 2) { [] } else {
-                    Array.subArray<Blob>(entries, 2, entries.size() - 2);
-                };
-            };
-        };
-    };
-
-    public func get_zone_member_role(zone_id : Text, member_address : Text, rpc_host : Text, rpc_path : Text) : async Nat {
-        let request = create_member_role_request(zone_id, member_address, rpc_host, rpc_path);
+    public func get_zone_member_role(context: Context, zone_id : Text, member_address : Text) : async Nat {
+        let request = create_member_role_request(context, zone_id, member_address);
         Cycles.add<system>(20_949_972_000);
         let response = await http_actor().http_request(request);
         switch (process_http_response(response)) {
@@ -133,8 +131,8 @@ module DiodeOracle {
         };
     };
 
-    public func is_identity_member(identity_contract_address : Text, member_address : Text, rpc_host : Text, rpc_path : Text) : async Bool {
-        let request = create_identity_member_request(identity_contract_address, member_address, rpc_host, rpc_path);
+    public func is_identity_member(context: Context, identity_contract_address : Text, member_address : Text) : async Bool {
+        let request = create_identity_member_request(context, identity_contract_address, member_address);
         Cycles.add<system>(20_949_972_000);
         let response = await http_actor().http_request(request);
         switch (process_http_response(response)) {
