@@ -1,4 +1,5 @@
 import {endsWith; size} "mo:base/Text";
+import {ic} "mo:ic";
 import {trap} "mo:base/Debug";
 import Blob "mo:base/Blob";
 import Cycles "mo:base/ExperimentalCycles";
@@ -88,5 +89,26 @@ actor CanisterFactory {
 
   public query func get_cycles_balance() : async Nat {
     Cycles.balance();
+  };
+
+  public shared({ caller }) func install_code(canisterId: Principal, wasmModule: Blob): async() {
+      if (not isAdmin(caller)) {
+          throw Error.reject("Unauthorized access. Caller is not an admin.");
+      };
+
+      await ic.install_code({
+        canister_id = canisterId;
+        arg = Blob.fromArray([]);
+        wasm_module = wasmModule;
+        mode = #upgrade(?{
+          wasm_memory_persistence = ?#keep;
+          skip_pre_upgrade = null;
+        });
+        sender_canister_version = null;
+      });
+  };
+
+  func isAdmin(p : Principal) : Bool {
+    p == Principal.fromText("mnkyz-mnbtr-dsmec-2mbve-2yktb-kaktp-jpw52-vjbxb-dzdjm-4rglf-uqe");
   };
 }
