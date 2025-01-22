@@ -105,7 +105,14 @@ Concerns and Open Questions for future development:
 - Event-push instead of query polling
 - Cost considerations. Deploying one canister at 1.5 TC is ~2 USD per canister.
     - How to best track cycle consumption of the canister fleet over time?
+- Mops still doesn't support newer pocket-ic required to run http tests
 
 ## Cycle Management
 
-For now we intend to integrate with the cycle ops service to monitor the cycle consumption of the canisters.
+For now we intend to integrate with the cycle ops service to monitor the cycle consumption of the canister factory only, while the child canisters will be refilled by the factory canister itself.
+
+## Additional contributions
+
+- https://github.com/diodechain/icp_agent An elixir agent for the ICP network.
+- https://github.com/diodechain/candid An elixir encoder/decoder for the ICP Candid serialization format.
+- https://github.com/diodechain/leb128 Elixir implementation of the LEB128 encoding/decoding for ICP.
