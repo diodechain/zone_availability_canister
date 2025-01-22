@@ -9,6 +9,7 @@ Deployment cost:
   - Before 9395133083458 cycles
   - After  7894439068843 cycles
   => 1_502_101_621_786 cycles (~1.87 USD)
+  => New Container has: 1_498_184_306_357
 
 # 21th January 2025
 

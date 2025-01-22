@@ -93,15 +93,18 @@ The factory canister is responsible for the following:
 2. Keeping track of all the zone availability canisters that have been created
 3. Returning the address of the newly created zone availability canister to the Diode App
 
-Concerns:
+Concerns and Open Questions for future development:
 
 - Will having a single factory limit all child canisters to the same subnet? Might this create a bottleneck and if yes how to address it?
 - How to update child contracts
+    => Upgrade vs Replace. Why is the motoko upgrade process so underdocumented? E.g. why is post-install() called with the constructor arguments?
     => Can we re-use a single WASM multiple times? (pointer to code vs code by value)
     => Is there a native code versioning system? (We added get_version() to the canisters)
 
 - Oracle pass through of transform function (because it needs to be a shared actor anchored function instead of just a function)
 - Event-push instead of query polling
+- Cost considerations. Deploying one canister at 1.5 TC is ~2 USD per canister.
+    - How to best track cycle consumption of the canister fleet over time?
 
 ## Cycle Management
 
