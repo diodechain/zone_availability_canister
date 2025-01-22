@@ -1,3 +1,5 @@
 .mops
 .dfx
 src/declarations
+*.key
+*.pem

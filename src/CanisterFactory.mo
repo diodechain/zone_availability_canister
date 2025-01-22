@@ -91,19 +91,16 @@ actor CanisterFactory {
     Cycles.balance();
   };
 
-  public shared({ caller }) func install_code(canisterId: Principal, wasmModule: Blob): async() {
+  public shared({ caller }) func install_code(canisterId: Principal, wasmModule: Blob, arg : Blob): async() {
       if (not isAdmin(caller)) {
           throw Error.reject("Unauthorized access. Caller is not an admin.");
       };
 
       await ic.install_code({
         canister_id = canisterId;
-        arg = Blob.fromArray([]);
+        arg = arg;
         wasm_module = wasmModule;
-        mode = #upgrade(?{
-          wasm_memory_persistence = ?#keep;
-          skip_pre_upgrade = null;
-        });
+        mode = #reinstall;
         sender_canister_version = null;
       });
   };
