@@ -27,7 +27,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   stable var dm : DiodeMessages.MessageStore = DiodeMessages.new();
   stable var zone_members : MemberCache.Cache = MemberCache.new(_args. zone_id, _args.rpc_host, _args.rpc_path, oracle_transform_function);
-  stable var installation_id : Nat = Time.now();
+  stable var installation_id : Int = Time.now();
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below 1 trillion cycles, topup by .5 trillion (~65 cents)
@@ -149,7 +149,11 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     Cycles.balance();
   };
 
-  public query func get_installation_id() : async Nat {
+  public query func get_installation_id() : async Int {
     installation_id;
+  };
+
+  public query func get_version() : async Nat {
+    100;
   };
 };

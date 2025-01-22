@@ -108,4 +108,8 @@ actor CanisterFactory {
   func isAdmin(p : Principal) : Bool {
     p == Principal.fromText("mnkyz-mnbtr-dsmec-2mbve-2yktb-kaktp-jpw52-vjbxb-dzdjm-4rglf-uqe");
   };
+
+  public query func get_version() : async Nat {
+    100;
+  };
 }

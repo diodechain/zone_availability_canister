@@ -1,3 +1,26 @@
+# 22nd January 2025
+
+Upgrade cost:
+  - Before 9396540690629 cycles
+  - After  9395133083458 cycles
+  => 1_407_607_171 (~17cent)
+
+Deployment cost:
+  - Before 9395133083458 cycles
+  - After  7894439068843 cycles
+  => 1_502_101_621_786 cycles (~1.87 USD)
+
+# 21th January 2025
+
+./run2: dbmsy-5qaaa-aaaao-qj3tq-cai diode
+./run2: cmcww-syaaa-aaaao-qj3ua-cai moonbeam
+...
+
+Token uses
+- 
+
+...
+
 # 20th January 2025
 
 ```bash
@@ -34,3 +57,4 @@ URLs:
 Checking cycle balance on: https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=dbmsy-5qaaa-aaaao-qj3tq-cai
 > 1_352_178_947_738 (1.3 Trillion)
 ```
+

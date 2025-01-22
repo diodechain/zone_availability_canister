@@ -13,7 +13,7 @@ factory = "dgnum-qiaaa-aaaao-qj3ta-cai"
 case System.argv() do
   [destination_text, chain] ->
     destination = ICPAgent.decode_textual(destination_text)
-    # {_, 0} = System.cmd("dfx", ["build", "ZoneAvailabilityCanister"])
+    {_, 0} = System.cmd("dfx", ["build", "ZoneAvailabilityCanister"])
 
     wasm =
       File.read!("./.dfx/local/canisters/ZoneAvailabilityCanister/ZoneAvailabilityCanister.wasm")
@@ -30,9 +30,6 @@ case System.argv() do
       end
 
     type = %{zone_id: :text, rpc_host: :text, rpc_path: :text, cycles_requester_id: :principal}
-    IO.inspect(Map.keys(type) |> Enum.sort_by(&Candid.namehash/1))
-    IO.inspect(Enum.map(type, fn {key, _} -> {key, Candid.namehash(key)} end))
-
     values = %{
       zone_id: zone_id,
       rpc_host: rpc_host,
@@ -42,12 +39,13 @@ case System.argv() do
 
     args = Candid.encode_parameters([{:record, type}], [values])
 
-    ICPAgent.call(factory, w, "install_code", [:principal, :blob, :blob], [
+    [] = ICPAgent.call(factory, w, "install_code", [:principal, :blob, :blob], [
       destination,
       wasm,
       args
     ])
-    |> IO.inspect()
+
+    IO.puts("Done! Review at: https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=#{destination_text}")
 
   _ ->
     IO.puts("Usage: upgrade_canister.exs <destination> (moonbeam|diode)")
