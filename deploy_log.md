@@ -1,3 +1,20 @@
+# 23rd January 2025
+
+Cycles Ledger: https://dashboard.internetcomputer.org/canister/um5iw-rqaaa-aaaaq-qaaba-cai
+
+Factory cycle balance: https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=dgnum-qiaaa-aaaao-qj3ta-cai
+- 4_786_290_383_954
+- After new zone canister
+- 3_285_596_452_603
+
+After topup:
+```bash
+> dfx cycles top-up dgnum-qiaaa-aaaao-qj3ta-cai 10T --network=ic
+```
+
+3_285_596_326_248
+
+
 # 22nd January 2025
 
 Upgrade cost:

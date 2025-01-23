@@ -5,6 +5,7 @@ import Blob "mo:base/Blob";
 import Cycles "mo:base/ExperimentalCycles";
 import CyclesManager "mo:cycles-manager/CyclesManager";
 import Error "mo:base/Error";
+import ICRC1 "mo:icrc1-types";
 import Principal "mo:base/Principal";
 import ZoneAvailabilityCanister "ZoneAvailabilityCanister";
 
@@ -55,8 +56,8 @@ actor CanisterFactory {
     rpc_path : Text
   ) : async Principal {
 
-    // 1 trillion cycles is ~ 1.30 USD => 600 billion cycles is ~ 0.75 USD
-    Cycles.add<system>(600_000_000_000);
+    // 1 trillion cycles is ~ 1.30 USD
+    Cycles.add<system>(1_000_000_000_000);
     let canister = await ZoneAvailabilityCanister.ZoneAvailabilityCanister({
       zone_id;
       rpc_host;
@@ -105,11 +106,32 @@ actor CanisterFactory {
       });
   };
 
+  func admin_principal() : Principal {
+    Principal.fromText("mnkyz-mnbtr-dsmec-2mbve-2yktb-kaktp-jpw52-vjbxb-dzdjm-4rglf-uqe");
+  };
+
   func isAdmin(p : Principal) : Bool {
-    p == Principal.fromText("mnkyz-mnbtr-dsmec-2mbve-2yktb-kaktp-jpw52-vjbxb-dzdjm-4rglf-uqe");
+    p == admin_principal();
+  };
+
+  public shared func refund() : async ?ICRC1.TransferResult {
+    let cycles_ledger = actor("um5iw-rqaaa-aaaaq-qaaba-cai") : ICRC1.Service;
+    let balance = await cycles_ledger.icrc1_balance_of({ owner = Principal.fromActor(CanisterFactory); subaccount = null });
+    if (balance == 0) return null;
+    let fee = await cycles_ledger.icrc1_fee();
+    if (balance <= fee) return null;
+
+    ?(await cycles_ledger.icrc1_transfer({
+      to = { owner = admin_principal(); subaccount = null };
+      amount = balance - fee;
+      fee = null;
+      memo = null;
+      created_at_time = null;
+      from_subaccount = null;
+    }));
   };
 
   public query func get_version() : async Nat {
-    100;
+    102;
   };
 }

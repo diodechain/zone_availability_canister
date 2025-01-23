@@ -30,11 +30,11 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   stable var installation_id : Int = Time.now();
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
-  // When below 1 trillion cycles, topup by .5 trillion (~65 cents)
+  // When below .7 trillion cycles, topup by .5 trillion (~65 cents)
   stable var cycles_requester: CyclesRequester.CyclesRequester = CyclesRequester.init({
     batteryCanisterPrincipal = _args.cycles_requester_id;
     topupRule = {
-      threshold = 1_000_000_000_000;
+      threshold = 700_000_000_000;
       method = #by_amount(500_000_000_000);
     };
   });
@@ -154,6 +154,6 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    100;
+    101;
   };
 };
