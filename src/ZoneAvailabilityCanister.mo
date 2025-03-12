@@ -12,6 +12,7 @@ import Result "mo:base/Result";
 import Sha256 "mo:sha2/Sha256";
 import Types "./Types";
 import Time "mo:base/Time";
+import {ic} "./IC";
 import Prim "mo:⛔";
 
 shared (_init_msg) actor class ZoneAvailabilityCanister(
@@ -156,13 +157,5 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public query func get_version() : async Nat {
     101;
-  };
-
-  public query func get_stable_storage_size() : async Nat {
-    Prim.rts_stable_memory_size();
-  };
-
-  public query func get_logical_stable_storage_size() : async Nat {
-    Prim.rts_logical_stable_memory_size();
   };
 };
