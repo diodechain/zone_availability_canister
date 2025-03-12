@@ -9,8 +9,8 @@ Diode Collab is a secure file sharing application built on the Internet Computer
 
 ```mermaid
 graph TD
-    User[User] --> DiodeCollab[DiodeCollab dApp]
-    DiodeCollab --> ZoneCanister[Zone Canister]
+    User[User] --> Frontend[Frontend dApp]
+    Frontend --> ZoneCanister[Zone Canister]
     ZoneCanister --> VetKD[vetKD System]
     ZoneCanister --> Storage[Encrypted Storage]
     
@@ -87,7 +87,7 @@ This milestone focuses on the initial technical implementation of Zone Canister 
 - **Initial Canister Contract**: Implemented and deployable with metadata handling and encryption stubs
 - **Unit Tests & Benchmarks**: Validating metadata encryption, storage, and retrieval
 - **Demo Recording**: Canister deployment and basic operations
-- **vetKEY client library**: New elixir agent client library to do interact with the vetKEY transport encryption using BLS curves.
+- **vetKEY client library**: New elixir agent client library to do interact with the vetKEY transport encryption using BLS12-381 curve cryptography.
 
 ## Implementation Details
 - Use the vetKEY teams publicy deployed stubs for key derivation at `s55qq-oqaaa-aaaaa-aaakq-cai`:
@@ -117,19 +117,19 @@ This milestone focuses on the initial technical implementation of Zone Canister 
 ```mermaid
 sequenceDiagram
     participant User
-    participant DiodeCollab
+    participant Frontend
     participant ZoneCanister
     participant VetKD
     
-    User->>DiodeCollab: Request to create zone
-    DiodeCollab->>ZoneCanister: Create zone request
-    ZoneCanister->>VetKD: Request public key (vetkd_public_key)
+    User->>Frontend: Request to create zone
+    Frontend->>ZoneCanister: Create zone request
+    ZoneCanister->>VetKD: Request public key vetkd_public_key
     VetKD-->>ZoneCanister: Return public key
     ZoneCanister->>ZoneCanister: Generate AES key for zone metadata
     ZoneCanister->>ZoneCanister: Encrypt AES key with public key
     ZoneCanister->>ZoneCanister: Store encrypted metadata
-    ZoneCanister-->>DiodeCollab: Zone created successfully
-    DiodeCollab-->>User: Display zone information
+    ZoneCanister-->>Frontend: Zone created successfully
+    Frontend-->>User: Display zone information
 ```
 
 ## Sprint 1 (Days 1-10): Core Storage Implementation with Metadata Handling
@@ -157,14 +157,18 @@ This milestone extends the Zone Canister to handle large chat attachments. Chat 
 
 ## Deliverables
 - **Attachment Storage Implementation**: Secure storage of large encrypted files
+- **Chunked Upload/Download API**: Implementation of incremental file transfer for large files
 - **Unit Tests & Performance Metrics**: Attachment retrieval benchmarks
 - **Demo Recording**: Showing attachment storage and retrieval in action
 
 ## Implementation Details
-- Implement per-file AES encryption key generation
-- Encrypt AES keys using access keys derived from vetKD
-- Define storage structure for encrypted attachments with partitioning of the data during upload and download to fit the request size limits of the icp
+- Define storage structure for encrypted attachments with partitioning of the data during upload and download to fit the request size limits of the ICP
 - Implement attachment validation and access control
+- Create chunked upload/download API to handle large files:
+  - `uploadCreate`: Initialize upload and get upload ID
+  - `uploadChunk`: Upload file chunks incrementally
+  - `uploadDone`: Finalize upload and validate file integrity
+  - `downloadChunk`: Download specific ranges of a file
 
 ## Architecture Diagram
 
@@ -177,8 +181,12 @@ graph TD
     end
     
     subgraph "Storage"
-        EncryptedFile[Encrypted Attachment] --> ZoneCanister[Zone Canister]
+        EncryptedFile[Encrypted Attachment] --> |Chunked Storage| ZoneCanister[Zone Canister]
         EncryptedFileKey[Encrypted AES Key] --> ZoneCanister
+        ZoneCanister --> ChunkManager[Chunk Manager]
+        ChunkManager --> Chunk1[Chunk 1]
+        ChunkManager --> Chunk2[Chunk 2]
+        ChunkManager --> ChunkN[Chunk N]
     end
     
     subgraph "Access Control"
@@ -189,42 +197,77 @@ graph TD
     end
 ```
 
-## Sequence Diagram
+## Sequence Diagram for Chunked Upload
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant DiodeCollab
+    participant Frontend
     participant ZoneCanister
-    participant VetKD
     
-    User->>DiodeCollab: Upload attachment
-    DiodeCollab->>DiodeCollab: Generate AES key for attachment
-    DiodeCollab->>DiodeCollab: Encrypt attachment with AES key
-    DiodeCollab->>ZoneCanister: Request access key (vetkd_derive_encrypted_key)
-    ZoneCanister->>VetKD: Request encrypted key
-    VetKD-->>ZoneCanister: Return encrypted key
-    ZoneCanister-->>DiodeCollab: Return encrypted key
-    DiodeCollab->>DiodeCollab: Encrypt AES key with access key
-    DiodeCollab->>ZoneCanister: Upload encrypted attachment and key
-    ZoneCanister->>ZoneCanister: Store encrypted attachment and key
-    ZoneCanister-->>DiodeCollab: Upload successful
-    DiodeCollab-->>User: Display confirmation
+    User->>Frontend: Select large file to upload
+    Frontend->>Frontend: Generate AES key for attachment
+    Frontend->>Frontend: Encrypt attachment with AES key
+    Frontend->>ZoneCanister: uploadCreate(filename, size, metadata)
+    ZoneCanister->>ZoneCanister: Create upload session
+    ZoneCanister-->>Frontend: Return uploadId
+    
+    loop For each chunk
+        Frontend->>Frontend: Prepare next chunk
+        Frontend->>ZoneCanister: uploadChunk(uploadId, chunkIndex, chunkData)
+        ZoneCanister->>ZoneCanister: Store chunk
+        ZoneCanister-->>Frontend: Confirm chunk stored
+    end
+    
+    Frontend->>ZoneCanister: uploadDone(uploadId, checksum)
+    ZoneCanister->>ZoneCanister: Validate file integrity
+    ZoneCanister-->>Frontend: Upload successful
+    Frontend-->>User: Display confirmation
+```
+
+## Sequence Diagram for Chunked Download
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant ZoneCanister
+    
+    User->>Frontend: Request to download file
+    Frontend->>ZoneCanister: Request file metadata
+    ZoneCanister->>ZoneCanister: Verify user's permissions
+    ZoneCanister-->>Frontend: Return file metadata (size, chunks)
+    
+    
+    loop For each chunk
+        Frontend->>ZoneCanister: downloadChunk(fileId, chunkIndex)
+        ZoneCanister->>ZoneCanister: Retrieve chunk
+        ZoneCanister-->>Frontend: Return encrypted chunk
+        Frontend->>Frontend: Decrypt chunk with AES key
+        Frontend->>Frontend: Assemble file incrementally
+    end
+    
+    Frontend->>Frontend: Validate complete file integrity and decrypt
+    Frontend-->>User: Display/save complete file
 ```
 
 ## Sprint 1 (Days 31-40): Implementation of Secure Attachment Storage
-- Define storage structure for encrypted attachments
+- Define canister storage structure for encrypted attachments
+- Implement chunked upload/download API for large files
 - Implement attachment validation and metadata handling
 - Research cost impact of storing encrypted attachments
 
 ## Sprint 2 (Days 41-50): Scalability & Cost Benchmarking
 - Benchmark attachment storage efficiency
+- Optimize chunk size for best performance/cost balance
 - Define policies for large attachments and auto-pruning
-- Implement performance optimizations
+- Implement resumable uploads for better reliability
 
 ## Sprint 3 (Days 51-60): Testing & Finalization
 - Conduct security and access validation
 - Optimize retrieval speed for encrypted files
+- Test with various file sizes and network conditions
+- Implement progress tracking and error handling
 - Finalize documentation and prepare for integration
 
 ---
@@ -233,19 +276,39 @@ sequenceDiagram
 
 ## Story
 
-This milestone ensures that the Zone Canister handles all shared and privately shared data with proper vetKEY encryption while implementing policies for handling large files efficiently.
+This milestone rides on top of milestones #1 and #2 applying both vetKEY gated access policies and incremental file uploads and downloads extending them now to all shared and privately shared data of the zone and moving all data to the canister. Each canister will have values to define a cost thresholds that should be enforced using upload limits and data pruning.
 
 ## Deliverables
 - **Full vetKEY Integration**: All shared data is encrypted using vetKEYs
-- **Scalability Optimization Policies**: Implemented strategies for large data handling
+- **Encrypted Directory Structure**: Secure directory listings with permission-based visibility
+- **Cost Threshold**: Upload limits and data pruning
 - **Demo Recording**: Showcasing secure data sharing and pruning policies
-- **Technical Documentation**: Detailed explanation of the encryption architecture
 
 ## Implementation Details
-- Transition from encryption stubs to full vetKEY implementation
 - Implement role-based access control (Admin, Owner, Moderator, Member, ReadOnly)
+- Implement directory permission controls with inherited and explicit permissions
+- Implement encrypted directory listings with metadata (file names, sizes, timestamps)
 - Define policies for handling large files and automatic pruning
 - Implement secure key rotation mechanisms
+
+## Sequence Diagram for Secure Directory Listing
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant ZoneCanister
+    participant VetKD
+    
+    User->>Frontend: Request directory listing
+    Frontend->>ZoneCanister: listDirectory(path)
+    ZoneCanister->>ZoneCanister: Verify User's permissions
+    ZoneCanister->>VetKD: Request key derivation for User
+    VetKD-->>ZoneCanister: Return derived key
+    ZoneCanister-->>Frontend: Return encrypted directory listing
+    Frontend->>Frontend: Decrypt directory metadata
+    Frontend-->>User: Display accessible files and folders
+```
 
 ## Sequence Diagram for Secure Sharing
 
@@ -253,90 +316,224 @@ This milestone ensures that the Zone Canister handles all shared and privately s
 sequenceDiagram
     participant Owner
     participant Member
-    participant DiodeCollab
+    participant Frontend
     participant ZoneCanister
     participant VetKD
     
-    Owner->>DiodeCollab: Share file with Member
-    DiodeCollab->>ZoneCanister: Request to share file
+    Owner->>Frontend: Share file/directory with Member
+    Frontend->>ZoneCanister: Request to share file/directory
     ZoneCanister->>ZoneCanister: Verify Owner's permissions
     ZoneCanister->>VetKD: Generate access key for Member
     VetKD-->>ZoneCanister: Return encrypted access key
     ZoneCanister->>ZoneCanister: Update access control list
-    ZoneCanister-->>DiodeCollab: Sharing successful
-    DiodeCollab-->>Owner: Display confirmation
+    ZoneCanister->>ZoneCanister: Update directory permissions
+    ZoneCanister-->>Frontend: Sharing successful
+    Frontend-->>Owner: Display confirmation
     
-    Member->>DiodeCollab: Request access to file
-    DiodeCollab->>ZoneCanister: Request file access
+    Member->>Frontend: Request access to file/directory
+    Frontend->>ZoneCanister: Request file/directory access
     ZoneCanister->>ZoneCanister: Verify Member's permissions
     ZoneCanister->>VetKD: Request key derivation for Member
     VetKD-->>ZoneCanister: Return derived key
-    ZoneCanister-->>DiodeCollab: Return encrypted file and key
-    DiodeCollab->>DiodeCollab: Decrypt file using derived key
-    DiodeCollab-->>Member: Display file
+    ZoneCanister-->>Frontend: Return encrypted file/directory data and key
+    Frontend->>Frontend: Decrypt data using derived key
+    Frontend-->>Member: Display file/directory contents
 ```
 
-## Sprint 1 (Days 61-70): Final Encryption Implementation
-- Transition from encryption stubs to full vetKEY encryption
-- Implement encryption handling for shared/private data
-- Benchmark encryption cost
+## Sequence Diagram for Directory Creation and Management
+
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant Frontend
+    participant ZoneCanister
+    participant VetKD
+    
+    Admin->>Frontend: Create new directory
+    Frontend->>ZoneCanister: createDirectory(path, permissions)
+    ZoneCanister->>ZoneCanister: Verify Admin's permissions
+    ZoneCanister->>VetKD: Request encryption key
+    VetKD-->>ZoneCanister: Return encryption key
+    ZoneCanister->>ZoneCanister: Create encrypted directory entry
+    ZoneCanister->>ZoneCanister: Set initial permissions
+    ZoneCanister-->>Frontend: Directory created successfully
+    Frontend-->>Admin: Display confirmation
+    
+    Admin->>Frontend: Modify directory permissions
+    Frontend->>ZoneCanister: updatePermissions(path, permissions)
+    ZoneCanister->>ZoneCanister: Verify Admin's permissions
+    ZoneCanister->>ZoneCanister: Update directory ACL
+    ZoneCanister-->>Frontend: Permissions updated
+    Frontend-->>Admin: Display updated permissions
+```
+
+## Sprint 1 (Days 61-70): Directory Structure and Encryption Implementation
+- Implement encrypted directory structure with metadata
+- Implement permission inheritance model for directories
+- Implement directory listing API with permission filtering
+- Implement encryption handling for shared/private directory data
+- Benchmark encryption cost for directory operations
 
 ## Sprint 2 (Days 71-80): Large Data Handling & Cost Optimization
 - Implement policies for large file warnings and automatic pruning
-- Research and optimize data storage costs
-- Test retrieval efficiency for large-scale data
+- Research and optimize data storage costs for directory structures
+- Implement directory-level quota management
+- Test retrieval efficiency for large directory structures
+- Implement recursive permission updates for directory trees
 
 ## Sprint 3 (Days 81-90): Security & Performance Validation
-- Validate encryption integrity and access control
-- Optimize performance for large-scale file sharing
+- Validate encryption integrity and access control for directories
+- Optimize directory listing performance for deep hierarchies
+- Implement search functionality across encrypted directories
+- Test directory sharing and permission propagation
 - Finalize documentation and demo preparations
 
 ---
 
-# Milestone #4/4 – App Integration & Production Launch
+# Milestone #4/4 – Monitoring, Staged Rollout, Optimization and GA Launch
 
 ## Story
 
-The final milestone ensures that all features are integrated into the Diode Collab app, optimized for production deployment, and launched with a staged rollout.
+The final milestone ensures that all features are integrated into the Diode Collab app, optimized for production deployment, and launched with a staged rollout. New features in the Canister will be focused around operational management, monitoring and cost control. This specifically includes migration of existing canisters and migration from vetKEY stubs latest to the ICP production deployed system APIs
 
 ## Deliverables
-- **Production-Ready Release**: Final canister and app integration
-- **Automated Monitoring**: Performance metrics and security logging
-- **Cost Mitigation Strategies**: Finalized policies for storage and processing efficiency
+- **Implement Migration Strategy**: Implement migration strategy to upgrade Zone canisters and start uploads + encryption.
+- **Automated Monitoring**: Keep track of cost metrics and integrate with 24/7 ops team monitoring.
+- **Cost Threshold Calibration**: Finalize optimal default thresholds and automatic threshold adjustments.
 - **Final Demo Recording**: Showcasing the complete functionality
-- **User Documentation**: Comprehensive guides for end users
 
 ## Implementation Details
-- Implement UI components for seamless user experience
-- Integrate DiodeCollab with the secure storage backend
-- Implement monitoring and alerting for security and performance
-- Finalize user documentation and support materials
+- Implement Canister Migration logic
+- Implement vetKEY migration from application stub to system API
+- Test migrations from different canister code versions
+- Implement additional monitoring and management canister logic
+- Support staged rollout to customers
 
-## Architecture Diagram (Full System)
+## vetKEY Migration Process (*if needed)
+
+The migration from the vetKEY application canister to the native system API is a critical process that requires careful handling to ensure data security is maintained throughout. This process allows for a seamless transition without service disruption.
+
+### Migration Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Admin as Zone Admin
+    participant Frontend as Frontend App
+    participant ZC as Zone Canister
+    participant OldVetKD as vetKEY App Canister
+    participant NewVetKD as System vetKD API
+    
+    Admin->>Frontend: Initiate migration procedure
+    Frontend->>ZC: requestMigration()
+    ZC->>ZC: Enable dual-mode operation
+    ZC-->>Frontend: Migration initiated successfully
+    Frontend-->>Admin: Display migration dashboard
+    
+    Frontend->>ZC: getKeysRequiringMigration()
+    ZC->>ZC: Identify encrypted keys using old vetKD
+    ZC-->>Frontend: Return list of keys to migrate with metadata
+    Frontend-->>Admin: Display migration progress (0%)
+    
+    loop For each key batch
+        Admin->>Frontend: Process next batch
+        Frontend->>ZC: migrateKeyBatch(keyIds)
+        
+        loop For each key in batch
+            ZC->>OldVetKD: Retrieve original key material
+            OldVetKD-->>ZC: Return encrypted key material
+            ZC->>ZC: Decrypt with old method
+            
+            ZC->>NewVetKD: Request new key derivation
+            NewVetKD-->>ZC: Return new encrypted key
+            ZC->>ZC: Re-encrypt payload with new key
+            ZC->>ZC: Update key reference to use system API
+            ZC->>ZC: Mark key as migrated
+        end
+        
+        ZC-->>Frontend: Return batch migration status
+        Frontend-->>Admin: Update migration progress
+    end
+    
+    Admin->>Frontend: Finalize migration
+    Frontend->>ZC: completeMigration()
+    ZC->>ZC: Verify all keys migrated
+    ZC->>ZC: Disable old vetKD connection
+    ZC->>ZC: Enable system API only mode
+    ZC-->>Frontend: Migration completed successfully
+    Frontend-->>Admin: Display migration completion report
+```
+
+### Migration Process Description
+
+1. **Initiation Phase**
+   - The Zone Admin initiates the migration procedure through the admin interface
+   - The Zone Canister enters a dual-operation mode where it can interact with both the old vetKEY application canister and the new system API
+   - The canister performs an initial assessment to identify all keys and encrypted payloads that need migration
+
+2. **Discovery Phase**
+   - The Zone Canister generates a comprehensive inventory of all transport-encrypted keys and their associated payloads
+   - This inventory includes metadata such as key usage, creation date, and estimated migration complexity
+   - The system tracks which keys have been migrated to ensure no data is missed
+
+3. **Incremental Migration Phase**
+   - The Zone Admin can process the migration in manageable batches to minimize system impact
+   - For each batch:
+     - The Zone Canister retrieves the original key material from the old vetKD system
+     - New keys are requested from the system-based vetKD functions
+     - Payloads are re-encrypted using the new keys
+     - References are updated to point to the new key system
+     - Migration status is tracked and reported
+
+4. **Verification Phase**
+   - After all keys are migrated, the system performs integrity checks to ensure all data is accessible
+   - The Zone Canister verifies that all encrypted content can be successfully decrypted using the new system
+   - Any anomalies are reported for manual intervention
+
+5. **Completion Phase**
+   - Once verification is successful, the connection to the old vetKEY application canister is disabled
+   - The Zone Canister switches to system API-only mode
+   - A final migration report is generated for audit purposes
+
+This migration approach ensures continuous availability of encrypted data while transitioning to the more efficient and secure system API implementation. The incremental nature of the process minimizes risk and allows for careful validation at each step.
+
+## Final Architecture Diagram
 
 ```mermaid
 graph TD
-    User[User] --> DiodeCollab[DiodeCollab dApp]
-    DiodeCollab --> |Encrypted Data| ZoneCanister[Zone Canister]
-    DiodeCollab --> |Key Management| KeyManagement[Key Management]
+    User[User] --> Frontend[Frontend dApp]
     
-    subgraph "Backend Services"
-        ZoneCanister --> Storage[Encrypted Storage]
-        ZoneCanister --> AccessControl[Access Control]
-        ZoneCanister --> VetKD[vetKD System]
+    subgraph "Zone Canister"
+        ApplicationLogic[Zone Business Logic]
+        
+        subgraph "Backend Services"
+            Storage[Encrypted Storage]
+            AccessControl[Access Control]
+        end
+        
+        subgraph "Security Services"
+            KeyManagement[Key Management]
+            AESEncryption[AES Encryption]
+        end
+        
+        subgraph "Monitoring & Operations"
+            Metrics[Performance Metrics]
+            CostControl[Cost Control]
+        end
     end
     
-    subgraph "Security Services"
-        KeyManagement --> |vetkd_public_key| VetKD
-        KeyManagement --> |vetkd_derive_encrypted_key| VetKD
-        KeyManagement --> AESEncryption[AES Encryption]
-    end
+    Frontend -->|Encrypted Data| ApplicationLogic
+    Frontend -->|Key Requests| KeyManagement
     
-    subgraph "Monitoring & Operations"
-        ZoneCanister --> Metrics[Performance Metrics]
-        ZoneCanister --> SecurityLogs[Security Logs]
-        ZoneCanister --> CostControl[Cost Control]
-    end
+    ApplicationLogic --> Storage
+    ApplicationLogic --> AccessControl
+    ApplicationLogic --> Metrics
+    ApplicationLogic --> CostControl
+    
+    KeyManagement -->|vetkd_public_key| VetKD[vetKD System]
+    KeyManagement -->|vetkd_derive_encrypted_key| VetKD
+    KeyManagement --> AESEncryption
+    
+    AESEncryption --> ApplicationLogic
 ```
 
 ## Sprint 1 (Days 91-100): Full App Integration
@@ -354,11 +551,26 @@ graph TD
 - Implement alerts and fail-safe mechanisms for cost control
 - Finalize documentation and support materials
 
----
+## Cost Model and Thresholds
 
-## Alternative Pre-vetKEY Deployment Approach
+The system uses several cost-related metrics to ensure efficient operation:
 
-During the development phase or in environments where vetKEY is not yet available, the system can operate using secure side-channel key exchange:
+1. **Storage Cost Thresholds**: Maximum storage limits per zone canister (e.g., 2GB)
+2. **Computation Cost Thresholds**: Limits on key derivation operations (each costing ~0.05€)
+3. **Cycle Consumption Monitoring**: Tracking cycle usage to prevent canister depletion
+
+When thresholds are exceeded:
+- Large file uploads will be rejected with appropriate error messages
+- Automatic pruning of older, less accessed data may occur
+- Notifications will be sent to the Ops team
+
+# Appendix
+
+## Side-Channel Key Sharing for Cost Optimization when other devices are online
+
+Based on the discussion with Kristofer the cost for key derivation is so high (0.05 Euro per single call) that mechanisms to skip these if not needed will make sense to keep cost low.
+
+One approach will be to use the existing side-channel communication when other devices of same permission level are online and connected. A key exchange and decryption could then look like this:
 
 ```mermaid
 sequenceDiagram
@@ -386,3 +598,29 @@ sequenceDiagram
 ```
 
 This approach ensures security even before the full vetKEY system is deployed, allowing for early testing and validation of the core functionality. 
+
+# Terminology Clarification
+- **vetKD**: The Internet Computer's verifiable threshold key derivation system
+- **vetKEY**: Our integration layer that leverages vetKD for secure key management 
+
+## Milestone Progression
+
+Milestone #1 establishes the foundational encryption infrastructure with vetKD stubs.
+
+Milestone #2 builds on this foundation by extending the encryption model to handle large binary attachments, using the same encryption principles but adding chunked transfer capabilities.
+
+Milestone #3 expands the security model to include directory structures and permissions, leveraging the encryption and chunking mechanisms developed in previous milestones.
+
+Milestone #4 focuses on operational aspects, ensuring the entire system works reliably at scale. 
+
+
+## Risk Assessment
+
+1. **vetKD Integration Complexity**: The integration with vetKD might be more complex than anticipated
+   - Mitigation: Allocate additional time for integration testing in Milestone #3
+
+2. **Cost Optimization Challenges**: The high cost of key derivation operations (0.05€ per call) could make the system expensive to operate
+   - Mitigation: Implement side-channel key sharing as described in the Appendix
+
+3. **Storage Limitations**: Canister storage limits might constrain the system's capacity
+   - Mitigation: Implement efficient pruning policies and consider multi-canister architectures
