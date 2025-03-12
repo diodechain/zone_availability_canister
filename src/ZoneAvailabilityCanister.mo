@@ -12,6 +12,7 @@ import Result "mo:base/Result";
 import Sha256 "mo:sha2/Sha256";
 import Types "./Types";
 import Time "mo:base/Time";
+import {ic} "./IC";
 
 shared (_init_msg) actor class ZoneAvailabilityCanister(
   _args : {
@@ -155,5 +156,9 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public query func get_version() : async Nat {
     101;
+  };
+
+  public shared func get_stable_size() : async Nat64 {
+    await ic.stable64_size();
   };
 };

@@ -1,5 +1,5 @@
 import {endsWith; size} "mo:base/Text";
-import {ic} "mo:ic";
+import {ic} "IC";
 import {trap} "mo:base/Debug";
 import Blob "mo:base/Blob";
 import Cycles "mo:base/ExperimentalCycles";
@@ -133,5 +133,13 @@ actor CanisterFactory {
 
   public query func get_version() : async Nat {
     102;
+  };
+
+  public shared func get_stable_size() : async Nat32 {
+    await ic.stable_size();
+  };
+
+  public shared func get_stable64_size() : async Nat64 {
+    await ic.stable64_size();
   };
 }
