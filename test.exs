@@ -355,7 +355,9 @@ defmodule Test do
     IO.puts("wallet_address: #{Wallet.printable(w)}")
     canister_id = default_canister_id()
 
-    [{0, 1}] = call(canister_id, w, "test_record_output", [], [])
+    [6] = call(canister_id, w, "get_logical_stable_storage_size", [], [])
+    [6] = call(canister_id, w, "get_stable_storage_size", [], [])
+    [201] = call(canister_id, w, "get_version", [], [])
 
     [3] =
       call(canister_id, w, "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
