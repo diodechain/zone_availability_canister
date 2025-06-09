@@ -12,6 +12,7 @@ import Result "mo:base/Result";
 import Sha256 "mo:sha2/Sha256";
 import Types "./Types";
 import Time "mo:base/Time";
+import MetaData "./MetaData";
 import {ic} "./IC";
 import Prim "mo:⛔";
 
@@ -30,6 +31,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   stable var dm : DiodeMessages.MessageStore = DiodeMessages.new();
   stable var zone_members : MemberCache.Cache = MemberCache.new(_args. zone_id, _args.rpc_host, _args.rpc_path, oracle_transform_function);
   stable var installation_id : Int = Time.now();
+  stable var meta_data : MetaData.MetaData = MetaData.new();
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below .7 trillion cycles, topup by .5 trillion (~65 cents)
@@ -126,10 +128,61 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     await MemberCache.update_identity_member(zone_members, public_key, identity_contract_address);
   };
 
+  public shared(msg) func set_public_key(public_key : Blob) {
+    assert_admin(msg.caller);
+    MetaData.set_public_key(meta_data, public_key);
+  };
+
+  public shared(msg) func set_vet_actor(vet_actor : MetaData.VETKD_SYSTEM_API) {
+    assert_admin(msg.caller);
+    MetaData.set_vet_actor(meta_data, vet_actor);
+  };
+
+  public shared(msg) func set_vet_protected_key(vet_protected_key : Blob) {
+    assert_admin(msg.caller);
+    MetaData.set_vet_protected_key(meta_data, vet_protected_key);
+  };
+
+  public func get_meta_data_info() : async MetaData.MetaDataInfo {
+    MetaData.get_meta_data_info(meta_data);
+  };
+
+  public query(msg) func get_data_entry(key : Nat8) : async ?MetaData.DataEntry {
+    assert_membership(msg.caller);
+    MetaData.get_data_entry(meta_data, key);
+  };
+
+  public shared(msg) func set_data_entry(key : Nat8, data : Blob) {
+    assert_admin(msg.caller);
+    MetaData.set_data_entry(meta_data, key, data);
+  };
+
+  public shared(msg) func delete_data_entry(key : Nat8) {
+    assert_admin(msg.caller);
+    MetaData.delete_data_entry(meta_data, key);
+  };
+
+  public query(msg) func get_timestamps() : async [MetaData.DirectoryEntry] {
+    assert_membership(msg.caller);
+    MetaData.get_timestamps(meta_data);
+  };
+
+  public shared(msg) func derive_vet_protector_key(transport_public_key : Blob) : async ?Blob {
+    assert_membership(msg.caller);
+    await MetaData.derive_vet_protector_key(meta_data, transport_public_key);
+  };
+
   func assert_membership(member : Principal) {
     let role = MemberCache.get_role(zone_members, member);
     if (role == 0) {
       Debug.trap("Not a member of the zone");
+    };
+  };
+
+  func assert_admin(member : Principal) {
+    let role = MemberCache.get_role(zone_members, member);
+    if (role < 400) {
+      Debug.trap("Not an admin");
     };
   };
 
@@ -165,5 +218,5 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public query func get_logical_stable_storage_size() : async Nat {
     Prim.rts_logical_stable_memory_size();
-  };  
+  };
 };
