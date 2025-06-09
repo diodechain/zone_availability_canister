@@ -8,6 +8,10 @@
     "ZoneAvailabilityCanister": {
       "type": "motoko",
       "main": "src/ZoneAvailabilityCanister.mo"
+    },
+    "VetKeyTest": {
+      "type": "motoko",
+      "main": "src/VetKeyTest.mo"
     }
   },
   "defaults": {

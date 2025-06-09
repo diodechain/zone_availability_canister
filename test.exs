@@ -1,22 +1,25 @@
 #!/usr/bin/env elixir
 Mix.install([
-  {:candid, "~> 1.0.1"},
+  {:candid, "~> 1.3"},
   {:diode_client, "~> 1.0"},
   {:cbor, "~> 1.0"},
   {:jason, "~> 1.4"},
-  {:ex_sha3, "~> 0.1.1"},
+  {:ex_sha3, "~> 0.1"},
   {:benchee, "~> 1.0"},
-  {:finch, "~> 0.13.0"}
+  {:finch, "~> 0.13"},
+  {:ex_ecc, "~> 0.1"}
 ])
 
 defmodule Test do
   alias DiodeClient.Wallet
+  alias DiodeClient.Base16
 
   def default_canister_id() do
     "bkyz2-fmaaa-aaaaa-qaaaq-cai"
   end
 
   def default_host() do
+    # "https://ic0.app"
     "http://127.0.0.1:4943"
   end
 
@@ -128,7 +131,10 @@ defmodule Test do
       {:ok, %{value: value}, ""} = CBOR.decode(ret["certificate"].value)
       tree = flatten_tree(value["tree"])
 
-      reply = tree["request_status"][request_id]["reply"]
+      reply = case tree["request_status"] do
+        {^request_id, %{"reply" => reply}} -> reply
+        %{^request_id => %{"reply" => reply}} -> reply
+      end
 
       if reply != nil do
         {decoded, ""} = Candid.decode_parameters(reply)
@@ -398,6 +404,66 @@ defmodule Test do
     test_batch_read(w, canister_id, 1, 1000)
   end
 
+  def vetkd() do
+    #System.put_env("ICP_DOMAIN", "https://ic0.app")
+    #canister_id = "kkcrz-5qaaa-aaaao-qkbzq-cai"
+    canister_id = "uxrrr-q7777-77774-qaaaq-cai"
+
+    w =
+      Wallet.from_privkey(
+        DiodeClient.Base16.decode(
+          "0xb6dbce9418872c4b8f5a10a5778e247c60cdb0265f222c0bfdbe565cfe63d64a"
+        )
+      )
+
+    context = <<1>>
+    key_id = %{name: "test_key_1", curve: {:bls12_381_g2, nil}}
+
+    [_pubkey] =
+      call(canister_id, w, "vetkd_public_key", [
+        {:opt, :principal},
+        :blob,
+        {:record, %{name: :text, curve: {:variant, %{bls12_381_g2: :null}}}}
+      ], [canister_id, context, key_id])
+
+      # Asserting that using different transport encryptions
+      # actually do return the same result.
+      privkey = vetkd_derive_key(canister_id, w)
+      ^privkey = vetkd_derive_key(canister_id, w)
+  end
+
+  defp vetkd_derive_key(canister_id, w) do
+    alias ExEcc.BLS.HashToCurve
+    alias ExEcc.BLS.PointCompression
+    alias ExEcc.BLS.G2Primitives
+    alias ExEcc.BLS.Ciphersuites.G2Basic
+    alias ExEcc.FieldMath
+    alias ExEcc.OptimizedBLS12381.OptimizedCurve, as: Curve
+
+    context = <<1>>
+    key_id = %{name: "test_key_1", curve: {:bls12_381_g2, nil}}
+
+    transport_privkey = rem(:binary.decode_unsigned(:crypto.strong_rand_bytes(64)), Curve.curve_order())
+    transport_pubkey = G2Basic.sk_to_pk(transport_privkey)
+
+    [encrypted_key] =
+      call(canister_id, w, "vetkd_derive_key", [
+        :blob,
+        :blob,
+        :blob,
+        {:record, %{name: :text, curve: {:variant, %{bls12_381_g2: :null}}}}
+      ], [context, <<2>>, transport_pubkey, key_id])
+
+    # Reference: https://github.com/dfinity/vetkeys/blob/dd255c8fa1ec0356f9448f1728ed4d6a5b736308/frontend/ic_vetkeys/src/utils/utils.ts#L584
+    <<c1::unsigned-size(384), c2x::unsigned-size(384), c2y::unsigned-size(384), c3::unsigned-size(384)>> = encrypted_key
+    c1 = PointCompression.decompress_g1(c1)
+    _c2 = PointCompression.decompress_g2({c2x, c2y})
+    c3 = PointCompression.decompress_g1(c3)
+
+    c1_tsk = Curve.multiply(c1, transport_privkey)
+    Curve.add(c3, Curve.neg(c1_tsk)) |> Curve.normalize()
+  end
+
   def test_batch_write(w, canister_id, size \\ 10) do
     key_id = make_key(w)
     n = System.os_time(:nanosecond)
@@ -423,7 +489,7 @@ defmodule Test do
   def make_key(wallet) do
     addr = Wallet.address!(wallet)
     size = byte_size(addr)
-    <<size, addr::binary-size(20), 0::unsigned-size(20*8)>>
+    <<size, addr::binary-size(20), 0::unsigned-size(20 * 8)>>
   end
 
   def isOk([{tag, _result} = ret]) do
@@ -501,6 +567,7 @@ end
 
 Finch.start_link(name: TestFinch)
 :erlang.system_flag(:backtrace_depth, 30)
+IO.inspect(System.argv())
 
 case System.argv() do
   ["write_bench"] ->
@@ -516,6 +583,11 @@ case System.argv() do
   ["anomaly"] ->
     Test.ensure_service()
     Test.anomaly_benchmark()
+    System.halt(0)
+
+  ["vetkd"] ->
+    Test.ensure_service()
+    Test.vetkd()
     System.halt(0)
 
   ["test"] ->
