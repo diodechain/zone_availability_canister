@@ -1,21 +1,20 @@
 import Array "mo:base/Array";
 import Blob "mo:base/Blob";
-import Debug "mo:base/Debug";
 import Nat "mo:base/Nat";
 import Nat32 "mo:base/Nat32";
 import Nat8 "mo:base/Nat8";
 import {test; suite} "mo:test/async";
 import { MetaData } "../src/";
-import Result "mo:base/Result";
 
 actor {
   public func runTests() : async () {
-    var md = MetaData.new(make_key(1));
+    var md = MetaData.new();
+    MetaData.set_public_key(md, make_key(1));
 
     await suite("Add Data", func() : async () {
       await test("Should add one data entry", func() : async () {
         let info = MetaData.get_meta_data_info(md);
-        assert info.public_key == make_key(1);
+        assert info.public_key == ?make_key(1);
         assert info.vet_protected_key == null;
         assert info.manifest == 0;
         assert info.timestamp == 0;
@@ -34,7 +33,7 @@ actor {
             assert data.data == "data 1";
 
             let info2 = MetaData.get_meta_data_info(md);
-            assert info2.public_key == make_key(1);
+            assert info2.public_key == ?make_key(1);
             assert info2.vet_protected_key == null;
             assert info2.manifest == 2;
             assert info2.timestamp == data.timestamp;

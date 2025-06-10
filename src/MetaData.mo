@@ -3,24 +3,9 @@ import Nat8 "mo:base/Nat8";
 import Nat "mo:base/Nat";
 import Nat32 "mo:base/Nat32";
 import Array "mo:base/Array";
+import VetKD "VetKD";
 
 module MetaData {
-    public type VETKD_SYSTEM_API = actor {
-        vetkd_public_key : ({
-            canister_id : ?Principal;
-            context : Blob;
-            key_id : { curve : { #bls12_381_g2 }; name : Text };
-        }) -> async ({ public_key : Blob });
-        vetkd_derive_encrypted_key : ({
-            input : Blob;
-            context : Blob;
-            transport_public_key : Blob;
-            key_id : { curve : { #bls12_381_g2 }; name : Text };
-        }) -> async ({ encrypted_key : Blob });
-    };
-
-    let vetkd_system_api : VETKD_SYSTEM_API = actor ("s55qq-oqaaa-aaaaa-aaakq-cai");
-
     public type DataEntry = {
         timestamp : Int;
         data : Blob;
@@ -29,7 +14,7 @@ module MetaData {
     public type MetaData = {
         var public_key : ?Blob;
         var vet_protected_key : ?Blob;
-        var vet_actor : ?VETKD_SYSTEM_API;
+        var vet_actor : ?VetKD.SYSTEM_API;
         var manifest: Nat;
         var timestamp : Int;
         storage : [var ?DataEntry];
@@ -46,7 +31,7 @@ module MetaData {
         {
             var public_key = null;
             var vet_protected_key = null;
-            var vet_actor = ?vetkd_system_api;
+            var vet_actor = ?VetKD.system_api;
             var manifest = 0;
             var timestamp = 0;
             storage = Array.init<?DataEntry>(256, null);
@@ -64,7 +49,7 @@ module MetaData {
                         null;
                     };
                     case (?public_key) {
-                        let result = await vet_actor.vetkd_derive_encrypted_key({
+                        let result = await vet_actor.vetkd_derive_key({
                             input = "meta_data_encrpytion_key";
                             context = public_key;
                             transport_public_key = transport_public_key;
@@ -87,7 +72,7 @@ module MetaData {
         };
     };
 
-    public func set_vet_actor(meta_data: MetaData, vet_actor: VETKD_SYSTEM_API) {
+    public func set_vet_actor(meta_data: MetaData, vet_actor: VetKD.SYSTEM_API) {
         meta_data.vet_actor := ?vet_actor;
         meta_data.vet_protected_key := null;
     };
