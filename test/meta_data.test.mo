@@ -9,13 +9,13 @@ import { MetaData } "../src/";
 actor {
   public func runTests() : async () {
     var md = MetaData.new();
-    MetaData.set_public_key(md, make_key(1));
+    MetaData.set_public_and_protected_key(md, make_key(1), make_key(2));
 
     await suite("Add Data", func() : async () {
       await test("Should add one data entry", func() : async () {
         let info = MetaData.get_meta_data_info(md);
         assert info.public_key == ?make_key(1);
-        assert info.vet_protected_key == null;
+        assert info.vet_protected_key == ?make_key(2);
         assert info.manifest == 0;
         assert info.timestamp == 0;
 
@@ -34,9 +34,10 @@ actor {
 
             let info2 = MetaData.get_meta_data_info(md);
             assert info2.public_key == ?make_key(1);
-            assert info2.vet_protected_key == null;
+            assert info2.vet_protected_key == ?make_key(2);
             assert info2.manifest == 2;
             assert info2.timestamp == data.timestamp;
+            assert info2.timestamp > 0;
 
             assert (MetaData.get_data_entry(md, 1)) == data1;
             assert (MetaData.get_data_entry(md, 2)) == null;

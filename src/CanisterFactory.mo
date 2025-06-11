@@ -8,6 +8,8 @@ import Error "mo:base/Error";
 import ICRC1 "mo:icrc1-types";
 import Principal "mo:base/Principal";
 import ZoneAvailabilityCanister "ZoneAvailabilityCanister";
+import BTree "mo:btree/BTree";
+import Iter "mo:base/Iter";
 
 // A simple battery canister actor example that implements the cycles_manager_transferCycles API of the CyclesManager.Interface 
 
@@ -57,8 +59,7 @@ actor CanisterFactory {
   ) : async Principal {
 
     // 1 trillion cycles is ~ 1.30 USD
-    Cycles.add<system>(1_000_000_000_000);
-    let canister = await ZoneAvailabilityCanister.ZoneAvailabilityCanister({
+    let canister = await (with cycles = 1_000_000_000_000) ZoneAvailabilityCanister.ZoneAvailabilityCanister({
       zone_id;
       rpc_host;
       rpc_path;
@@ -141,5 +142,21 @@ actor CanisterFactory {
 
   public shared func get_stable64_size() : async Nat64 {
     await ic.stable64_size();
+  };
+
+  public query func get_cycles_manager_info() : async Text {
+    CyclesManager.toText(cyclesManager);
+  };
+
+  public query func get_cycles_manager_children_count() : async Nat {
+    BTree.size(cyclesManager.childCanisterMap);
+  };
+
+  public query func get_cycles_manager_children() : async [Principal] {
+    BTree.entries(cyclesManager.childCanisterMap)
+    |> Iter.map(_, func (i : (Principal, Any)) : Principal {
+        i.0;
+    })
+    |> Iter.toArray(_);
   };
 }

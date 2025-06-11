@@ -1,17 +1,17 @@
 [dependencies]
-base = "0.13.5"
+base = "0.14.11"
 map = "9.0.1"
-sha2 = "0.1.0"
+sha2 = "0.1.4"
 base16 = "1.0.0"
 sha3 = "0.1.1"
 cycles-manager = "https://github.com/CycleOperators/cycles-manager#master@da19c675032aa418b069e979d9f391a36c053a9c"
-ic = "2.0.0"
+ic = "2.1.0"
 icrc1-types = "1.0.0"
 
 [dev-dependencies]
-test = "2.0.0"
+test = "2.1.1"
 bench = "1.0.0"
 
 [toolchain]
-moc = "0.13.0"
+moc = "0.14.11"
 pocket-ic = "4.0.0"

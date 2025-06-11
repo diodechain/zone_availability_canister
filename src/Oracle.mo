@@ -122,8 +122,7 @@ module DiodeOracle {
 
     public func get_zone_member_role(context: Context, zone_id : Text, member_address : Text) : async Nat {
         let request = create_member_role_request(context, zone_id, member_address);
-        Cycles.add<system>(20_949_972_000);
-        let response = await http_actor().http_request(request);
+        let response = await (with cycles = 20_949_972_000) http_actor().http_request(request);
         switch (process_http_response(response)) {
             case (null) { 0 };
             case (?blob) { blob_to_nat(blob) };
@@ -132,8 +131,7 @@ module DiodeOracle {
 
     public func is_identity_member(context: Context, identity_contract_address : Text, member_address : Text) : async Bool {
         let request = create_identity_member_request(context, identity_contract_address, member_address);
-        Cycles.add<system>(20_949_972_000);
-        let response = await http_actor().http_request(request);
+        let response = await (with cycles = 20_949_972_000) http_actor().http_request(request);
         switch (process_http_response(response)) {
             case (null) { false };
             case (?blob) { blob_to_nat(blob) == 1 };

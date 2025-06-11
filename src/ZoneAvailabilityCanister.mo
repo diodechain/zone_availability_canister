@@ -15,6 +15,7 @@ import Time "mo:base/Time";
 import MetaData "./MetaData";
 import {ic} "./IC";
 import Prim "mo:⛔";
+import VetKd "VetKD";
 
 shared (_init_msg) actor class ZoneAvailabilityCanister(
   _args : {
@@ -128,22 +129,12 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     await MemberCache.update_identity_member(zone_members, public_key, identity_contract_address);
   };
 
-  public shared(msg) func set_public_key(public_key : Blob) {
+  public shared(msg) func set_public_and_protected_key(public_key : Blob, vet_protected_key : Blob) {
     assert_admin(msg.caller);
-    MetaData.set_public_key(meta_data, public_key);
+    MetaData.set_public_and_protected_key(meta_data, public_key, vet_protected_key);
   };
 
-  public shared(msg) func set_vet_actor(vet_actor : MetaData.VETKD_SYSTEM_API) {
-    assert_admin(msg.caller);
-    MetaData.set_vet_actor(meta_data, vet_actor);
-  };
-
-  public shared(msg) func set_vet_protected_key(vet_protected_key : Blob) {
-    assert_admin(msg.caller);
-    MetaData.set_vet_protected_key(meta_data, vet_protected_key);
-  };
-
-  public func get_meta_data_info() : async MetaData.MetaDataInfo {
+  public query func get_meta_data_info() : async MetaData.MetaDataInfo {
     MetaData.get_meta_data_info(meta_data);
   };
 
@@ -167,9 +158,9 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     MetaData.get_timestamps(meta_data);
   };
 
-  public shared(msg) func derive_vet_protector_key(transport_public_key : Blob) : async ?Blob {
+  public shared(msg) func derive_vet_protector_key(transport_public_key : Blob, target_public_key : Blob) : async ?Blob {
     assert_membership(msg.caller);
-    await MetaData.derive_vet_protector_key(meta_data, transport_public_key);
+    await MetaData.derive_vet_protector_key(meta_data, transport_public_key, target_public_key);
   };
 
   func assert_membership(member : Principal) {
@@ -209,7 +200,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    201;
+    203;
   };
 
   public query func get_stable_storage_size() : async Nat {

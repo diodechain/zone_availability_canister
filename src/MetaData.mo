@@ -1,8 +1,9 @@
-import Time "mo:base/Time";
-import Nat8 "mo:base/Nat8";
+import Array "mo:base/Array";
+import Cycles "mo:base/ExperimentalCycles";
 import Nat "mo:base/Nat";
 import Nat32 "mo:base/Nat32";
-import Array "mo:base/Array";
+import Nat8 "mo:base/Nat8";
+import Time "mo:base/Time";
 import VetKD "VetKD";
 
 module MetaData {
@@ -14,7 +15,6 @@ module MetaData {
     public type MetaData = {
         var public_key : ?Blob;
         var vet_protected_key : ?Blob;
-        var vet_actor : ?VetKD.SYSTEM_API;
         var manifest: Nat;
         var timestamp : Int;
         storage : [var ?DataEntry];
@@ -31,54 +31,30 @@ module MetaData {
         {
             var public_key = null;
             var vet_protected_key = null;
-            var vet_actor = ?VetKD.system_api;
             var manifest = 0;
             var timestamp = 0;
             storage = Array.init<?DataEntry>(256, null);
         };
     };
 
-    public func derive_vet_protector_key(meta_data: MetaData, transport_public_key: Blob) : async ?Blob {
-        switch (meta_data.vet_actor) {
-            case (null) {
-                null;
-            };
-            case (?vet_actor) {
-                switch (meta_data.public_key) {
-                    case (null) {
-                        null;
-                    };
-                    case (?public_key) {
-                        let result = await vet_actor.vetkd_derive_key({
-                            input = "meta_data_encrpytion_key";
-                            context = public_key;
-                            transport_public_key = transport_public_key;
-                            key_id = { curve = #bls12_381_g2; name = "vetkd_public_key" };
-                            });
-                        ?result.encrypted_key;
-                    };
-                };
-            };
-        };
+    public func derive_vet_protector_key(_meta_data: MetaData, transport_public_key: Blob, target_public_key: Blob) : async ?Blob {
+        let result = await (with cycles = 26_153_846_153) VetKD.system_api.vetkd_derive_key({
+            input = "meta_data_encrpytion_key";
+            context = target_public_key;
+            transport_public_key = transport_public_key;
+            key_id = { curve = #bls12_381_g2; name = "key_1" };
+            });
+        ?result.encrypted_key;
     };
     
-    public func set_public_key(meta_data: MetaData, public_key: Blob) {
+    public func set_public_and_protected_key(meta_data: MetaData, public_key: Blob, vet_protected_key: Blob) {
         meta_data.public_key := ?public_key;
-        meta_data.vet_protected_key := null;
+        meta_data.vet_protected_key := ?vet_protected_key;
         meta_data.manifest := 0;
         meta_data.timestamp := 0;
         for (i in meta_data.storage.keys()) {
             meta_data.storage[i] := null;
         };
-    };
-
-    public func set_vet_actor(meta_data: MetaData, vet_actor: VetKD.SYSTEM_API) {
-        meta_data.vet_actor := ?vet_actor;
-        meta_data.vet_protected_key := null;
-    };
-
-    public func set_vet_protected_key(meta_data: MetaData, vet_protected_key: Blob) {
-        meta_data.vet_protected_key := ?vet_protected_key;
     };
 
     public func get_meta_data_info(meta_data: MetaData) : MetaDataInfo {
