@@ -131,6 +131,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public shared(msg) func set_public_and_protected_key(public_key : Blob, vet_protected_key : Blob) {
     assert_admin(msg.caller);
+    ignore await* request_topup_if_low();
     MetaData.set_public_and_protected_key(meta_data, public_key, vet_protected_key);
   };
 
@@ -145,11 +146,13 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public shared(msg) func set_data_entry(key : Nat8, data : Blob) {
     assert_admin(msg.caller);
+    ignore await* request_topup_if_low();
     MetaData.set_data_entry(meta_data, key, data);
   };
 
   public shared(msg) func delete_data_entry(key : Nat8) {
     assert_admin(msg.caller);
+    ignore await* request_topup_if_low();
     MetaData.delete_data_entry(meta_data, key);
   };
 
@@ -160,6 +163,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public shared(msg) func derive_vet_protector_key(transport_public_key : Blob, target_public_key : Blob) : async ?Blob {
     assert_membership(msg.caller);
+    ignore await* request_topup_if_low();
     await MetaData.derive_vet_protector_key(meta_data, transport_public_key, target_public_key);
   };
 
@@ -200,7 +204,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    203;
+    204;
   };
 
   public query func get_stable_storage_size() : async Nat {
