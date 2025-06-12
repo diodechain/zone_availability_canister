@@ -28,7 +28,7 @@ sequenceDiagram
 
     UserB->>ZoneCanister: Retrieve Metadata info including encrypted encryption key
     UserB->>ZoneCanister: VetKD derive protected secret for public key
-    UserB->>ZoneCanister: Download encrypted metadata and decrypt using decrypted key.
+    UserB->>ZoneCanister: Download encrypted metadata and decrypt using decrypted key
 ```
 
 ### Key Components
