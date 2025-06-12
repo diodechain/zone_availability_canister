@@ -49,7 +49,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public shared(msg) func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
-    ignore await* request_topup_if_low();
+    ignore await request_topup_if_low();
     assert_membership(msg.caller);
 
     let hash = Sha256.fromBlob(#sha256, ciphertext);
@@ -57,7 +57,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public shared(msg) func add_messages(messages : [(Blob, Blob)]) : async Result.Result<[Nat32], Text> {
-    ignore await* request_topup_if_low();
+    ignore await request_topup_if_low();
     assert_membership(msg.caller);
     var message_ids : [Nat32] = [];
 
@@ -120,18 +120,18 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public func update_role(public_key : Blob) : async Nat {
-    ignore await* request_topup_if_low();
+    ignore await request_topup_if_low();
     await MemberCache.update_member(zone_members, public_key);
   };
 
   public func update_identity_role(public_key : Blob, identity_contract_address : Blob) : async Nat {
-    ignore await* request_topup_if_low();
+    ignore await request_topup_if_low();
     await MemberCache.update_identity_member(zone_members, public_key, identity_contract_address);
   };
 
   public shared(msg) func set_public_and_protected_key(public_key : Blob, vet_protected_key : Blob) {
     assert_admin(msg.caller);
-    ignore await* request_topup_if_low();
+    ignore await request_topup_if_low();
     MetaData.set_public_and_protected_key(meta_data, public_key, vet_protected_key);
   };
 
@@ -146,13 +146,13 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public shared(msg) func set_data_entry(key : Nat8, data : Blob) {
     assert_admin(msg.caller);
-    ignore await* request_topup_if_low();
+    ignore await request_topup_if_low();
     MetaData.set_data_entry(meta_data, key, data);
   };
 
   public shared(msg) func delete_data_entry(key : Nat8) {
     assert_admin(msg.caller);
-    ignore await* request_topup_if_low();
+    ignore await request_topup_if_low();
     MetaData.delete_data_entry(meta_data, key);
   };
 
@@ -163,7 +163,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public shared(msg) func derive_vet_protector_key(transport_public_key : Blob, target_public_key : Blob) : async ?Blob {
     assert_membership(msg.caller);
-    ignore await* request_topup_if_low();
+    ignore await request_topup_if_low();
     await MetaData.derive_vet_protector_key(meta_data, transport_public_key, target_public_key);
   };
 
@@ -182,7 +182,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   // From https://github.com/CycleOperators/cycles-manager/blob/main/example/Child.mo
-  func request_topup_if_low(): async* CyclesManager.TransferCyclesResult {
+  public shared func request_topup_if_low(): async CyclesManager.TransferCyclesResult {
     await* CyclesRequester.requestTopupIfBelowThreshold(cycles_requester);
   };
 
