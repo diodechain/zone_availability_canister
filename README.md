@@ -36,16 +36,15 @@ graph TD
 
 Detailed descrptions of the Architecture in each development milestone:
 
-- [MS1: IC Capacity evaluation](./ARCHITECTURE_MS1.md) storing 100k encrytped messages in a canister and retrieving them. 
-- [MS2: Authentication](./ARCHITECTURE_MS2.md) only allowing Zone members to interact with the Canister.
-- [MS3: Integration](./ARCHITECTURE_MS3.md) integration of the canisters into the Diode App.
+- [Diode Message Cache](./docs/messages/ARCHITECTURE_MS1.md) storing 100k encrytped messages in a canister and retrieving them. 
+- [Diode VetKD Store](./docs/MS1.md)
 
 ## Build Prerequisites
 This project requires an installation of:
 
 - nodejs >= 22.9
 - mops https://cli.mops.one/
-- DFX version 0.22.0 or newer
+- DFX version 0.24.0 or newer
 - The [Internet Computer SDK](https://internetcomputer.org/docs/current/developer-docs/setup/install/).
 
 ### Run the tests
