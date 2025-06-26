@@ -33,6 +33,7 @@ module DiodeAttachments {
     let metadata_size : Nat64 = 48; // 32 + 4 + 4 + 8; // identity_hash + timestamp + finalized(nat32) + size(nat64)
 
     public type AttachmentMetadata = {
+        identity_hash : Blob;
         timestamp : Nat32;
         finalized: Bool;
         size : Nat64;
@@ -163,10 +164,11 @@ module DiodeAttachments {
     };
 
     private func _read_metadata(store : AttachmentStore, offset : Nat64) : AttachmentMetadata {
+        let identity_hash = WriteableBand.readBlob(store.attachments, offset, 32);
         let timestamp = WriteableBand.readNat32(store.attachments, offset + 32);
         let finalized = WriteableBand.readNat32(store.attachments, offset + 32 + 4) == 1;
         let size = WriteableBand.readNat64(store.attachments, offset + 32 + 4 + 4);
-        return { timestamp = timestamp; finalized = finalized; size = size };
+        return { identity_hash = identity_hash; timestamp = timestamp; finalized = finalized; size = size };
     };
 
     public func read_attachment_chunk(store : AttachmentStore, identity_hash : Blob, chunk_offset : Nat64, chunk_size : Nat) : Result.Result<Blob, Text> {
