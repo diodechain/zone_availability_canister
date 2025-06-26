@@ -13,9 +13,7 @@ import Sha256 "mo:sha2/Sha256";
 import Types "./Types";
 import Time "mo:base/Time";
 import MetaData "./MetaData";
-import { ic } "./IC";
 import Prim "mo:⛔";
-import VetKd "VetKD";
 import DiodeAttachments "./DiodeAttachments";
 
 shared (_init_msg) actor class ZoneAvailabilityCanister(
@@ -269,7 +267,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    204;
+    300;
   };
 
   public query func get_stable_storage_size() : async Nat {
