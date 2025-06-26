@@ -21,7 +21,37 @@ actor {
         assert store.next_entry_offset == null;
       });
 
-      await test("Should write and read small attachment using write_attachment", func() : async () {
+      await test("Should write small attachment", func() : async () {
+        let store = DiodeAttachments.new(1000);
+        let hash = make_hash(1);
+        let data = Blob.fromArray([1, 2, 3, 4, 5]);
+        
+        // Write attachment
+        assert isOk(DiodeAttachments.write_attachment(store, hash, data));
+      });
+
+      await test("Should write and get metadata for small attachment", func() : async () {
+        let store = DiodeAttachments.new(1000);
+        let hash = make_hash(1);
+        let data = Blob.fromArray([1, 2, 3, 4, 5]);
+        
+        // Write attachment
+        assert isOk(DiodeAttachments.write_attachment(store, hash, data));
+        
+        // Get metadata
+        switch (DiodeAttachments.get_attachment_metadata(store, hash)) {
+          case (#ok(metadata)) {
+            assert metadata.finalized == true;
+            assert metadata.size == 5;
+            assert metadata.timestamp > 0;
+          };
+          case (#err(err)) {
+            assert false; // Should not error
+          };
+        };
+      });
+
+      await test("Should write and read small attachment", func() : async () {
         let store = DiodeAttachments.new(1000);
         let hash = make_hash(1);
         let data = Blob.fromArray([1, 2, 3, 4, 5]);
@@ -36,18 +66,6 @@ actor {
             assert attachment.ciphertext == data;
             assert attachment.finalized == true;
             assert attachment.timestamp > 0;
-          };
-          case (#err(err)) {
-            assert false; // Should not error
-          };
-        };
-        
-        // Get metadata
-        switch (DiodeAttachments.get_attachment_metadata(store, hash)) {
-          case (#ok(metadata)) {
-            assert metadata.finalized == true;
-            assert metadata.size == 5;
-            assert metadata.timestamp > 0;
           };
           case (#err(err)) {
             assert false; // Should not error

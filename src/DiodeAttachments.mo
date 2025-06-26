@@ -30,7 +30,7 @@ module DiodeAttachments {
         ciphertext : Blob;
     };
 
-    let metadata_size : Nat64 = 45; // 32 + 4 + 4 + 8; // identity_hash + timestamp + finalized(nat32) + size(nat64)
+    let metadata_size : Nat64 = 48; // 32 + 4 + 4 + 8; // identity_hash + timestamp + finalized(nat32) + size(nat64)
 
     public type AttachmentMetadata = {
         timestamp : Nat32;
@@ -164,8 +164,8 @@ module DiodeAttachments {
 
     private func _read_metadata(store : AttachmentStore, offset : Nat64) : AttachmentMetadata {
         let timestamp = WriteableBand.readNat32(store.attachments, offset + 32);
-        let size = WriteableBand.readNat64(store.attachments, offset + 32 + 4);
-        let finalized = WriteableBand.readNat32(store.attachments, offset + 32 + 4 + 4) == 1;
+        let finalized = WriteableBand.readNat32(store.attachments, offset + 32 + 4) == 1;
+        let size = WriteableBand.readNat64(store.attachments, offset + 32 + 4 + 4);
         return { timestamp = timestamp; finalized = finalized; size = size };
     };
 
