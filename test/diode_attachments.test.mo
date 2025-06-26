@@ -89,8 +89,8 @@ actor {
         };
         
         // Write chunks
-        let chunk1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromNat(i)));
-        let chunk2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromNat(i + 50)));
+        let chunk1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i)));
+        let chunk2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 50)));
         
         assert isOk(DiodeAttachments.write_attachment_chunk(store, hash, 0, 50, chunk1));
         assert isOk(DiodeAttachments.write_attachment_chunk(store, hash, 50, 50, chunk2));
@@ -199,9 +199,9 @@ actor {
         let hash2 = make_hash(6);
         let hash3 = make_hash(7);
         
-        let data1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromNat(i)));
-        let data2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromNat(i + 50)));
-        let data3 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromNat(i + 100)));
+        let data1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i)));
+        let data2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 50)));
+        let data3 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 100)));
         
         // Write first attachment
         assert isOk(DiodeAttachments.write_attachment(store, hash1, data1));
@@ -252,6 +252,198 @@ actor {
           };
           case (#err(_)) { assert false; };
         };
+      });
+
+      await test("Should handle ring-buffer edge cases at buffer boundaries #1", func() : async () {
+        // Test 1: End of data hits exactly at buffer end (size + metadata_size == max_offset)
+        // metadata_size = 48, so we'll test with various sizes around the boundary
+        
+        // Test case 1: size + metadata_size == max_offset (exact fit)
+        let store1 = DiodeAttachments.new(1000); // max_offset = 1000
+        let hash1 = make_hash(10);
+        let data1 = Blob.fromArray(Array.tabulate<Nat8>(952, func i = Nat8.fromIntWrap(i))); // 952 + 48 = 1000
+        
+        // This should fit exactly
+        assert isOk(DiodeAttachments.write_attachment(store1, hash1, data1));
+        
+        // Verify it exists
+        switch (DiodeAttachments.get_attachment(store1, hash1)) {
+          case (#ok(attachment)) {
+            assert attachment.identity_hash == hash1;
+            assert attachment.ciphertext.size() == 952;
+          };
+          case (#err(_)) { assert false; };
+        };
+      });
+
+      await test("Should handle ring-buffer edge cases at buffer boundaries #2", func() : async () {
+        // Test case 2: size + metadata_size == max_offset - 1 (should fit)
+        let store2 = DiodeAttachments.new(1000);
+        let hash2 = make_hash(11);
+        let data2 = Blob.fromArray(Array.tabulate<Nat8>(951, func i = Nat8.fromIntWrap(i))); // 951 + 48 = 999
+        
+        assert isOk(DiodeAttachments.write_attachment(store2, hash2, data2));
+
+      });
+
+      await test("Should handle ring-buffer edge cases at buffer boundaries #3", func() : async () {
+        // Test case 3: size + metadata_size == max_offset + 1 (should trigger wrap)
+        let store3 = DiodeAttachments.new(1000);
+        let hash3 = make_hash(12);
+        let data3 = Blob.fromArray(Array.tabulate<Nat8>(953, func i = Nat8.fromIntWrap(i))); // 953 + 48 = 1001
+        
+        // This should trigger ring-buffer wrap
+        assert isOk(DiodeAttachments.write_attachment(store3, hash3, data3));
+        
+        // Test case 4: Test the boundary condition with a second attachment
+        let hash4 = make_hash(13);
+        let data4 = Blob.fromArray(Array.tabulate<Nat8>(500, func i = Nat8.fromIntWrap(i)));
+        
+        // This should overwrite the first attachment due to ring-buffer behavior
+        assert isOk(DiodeAttachments.write_attachment(store3, hash4, data4));
+        
+        // First attachment should be overwritten
+        switch (DiodeAttachments.get_attachment(store3, hash3)) {
+          case (#ok(_)) {
+            assert false; // Should be overwritten
+          };
+          case (#err(err)) {
+            assert err == "attachment not found";
+          };
+        };
+        
+        // Second attachment should exist
+        switch (DiodeAttachments.get_attachment(store3, hash4)) {
+          case (#ok(attachment)) {
+            assert attachment.identity_hash == hash4;
+          };
+          case (#err(_)) { assert false; };
+        };
+      });
+
+      await test("Should handle multiple ring-buffer loops with different sizes", func() : async () {
+        // Create a store that will require multiple loops
+        let store = DiodeAttachments.new(2000); // Small enough to trigger multiple loops
+        
+        // First loop: Write attachments that will be overwritten
+        let hash1 = make_hash(20);
+        let hash2 = make_hash(21);
+        let data1 = Blob.fromArray(Array.tabulate<Nat8>(800, func i = Nat8.fromIntWrap(i)));
+        let data2 = Blob.fromArray(Array.tabulate<Nat8>(800, func i = Nat8.fromIntWrap(i + 800)));
+        
+        assert isOk(DiodeAttachments.write_attachment(store, hash1, data1));
+        assert isOk(DiodeAttachments.write_attachment(store, hash2, data2));
+        
+        // Verify both exist
+        assert attachmentExists(DiodeAttachments.get_attachment(store, hash1));
+        assert attachmentExists(DiodeAttachments.get_attachment(store, hash2));
+        
+        // Second loop: Write larger attachment that will overwrite both
+        let hash3 = make_hash(22);
+        let data3 = Blob.fromArray(Array.tabulate<Nat8>(1500, func i = Nat8.fromIntWrap(i + 1600)));
+        
+        assert isOk(DiodeAttachments.write_attachment(store, hash3, data3));
+        
+        // First two should be overwritten
+        switch (DiodeAttachments.get_attachment(store, hash1)) {
+          case (#ok(_)) { assert false; };
+          case (#err(err)) { assert err == "attachment not found"; };
+        };
+        
+        switch (DiodeAttachments.get_attachment(store, hash2)) {
+          case (#ok(_)) { assert false; };
+          case (#err(err)) { assert err == "attachment not found"; };
+        };
+        
+        // Third should exist
+        assert attachmentExists(DiodeAttachments.get_attachment(store, hash3));
+        
+        // Third loop: Write multiple smaller attachments
+        let hash4 = make_hash(23);
+        let hash5 = make_hash(24);
+        let data4 = Blob.fromArray(Array.tabulate<Nat8>(400, func i = Nat8.fromIntWrap(i + 3100)));
+        let data5 = Blob.fromArray(Array.tabulate<Nat8>(400, func i = Nat8.fromIntWrap(i + 3500)));
+        
+        assert isOk(DiodeAttachments.write_attachment(store, hash4, data4));
+        assert isOk(DiodeAttachments.write_attachment(store, hash5, data5));
+        
+        // Third attachment should be overwritten
+        switch (DiodeAttachments.get_attachment(store, hash3)) {
+          case (#ok(_)) { assert false; };
+          case (#err(err)) { assert err == "attachment not found"; };
+        };
+        
+        // Fourth and fifth should exist
+        assert attachmentExists(DiodeAttachments.get_attachment(store, hash4));
+        assert attachmentExists(DiodeAttachments.get_attachment(store, hash5));
+        
+        // Fourth loop: Write one more attachment to complete the cycle
+        let hash6 = make_hash(25);
+        let data6 = Blob.fromArray(Array.tabulate<Nat8>(600, func i = Nat8.fromIntWrap(i + 3900)));
+        
+        assert isOk(DiodeAttachments.write_attachment(store, hash6, data6));
+        
+        // Fourth should be overwritten
+        switch (DiodeAttachments.get_attachment(store, hash4)) {
+          case (#ok(_)) { assert false; };
+          case (#err(err)) { assert err == "attachment not found"; };
+        };
+        
+        // Fifth and sixth should exist
+        assert attachmentExists(DiodeAttachments.get_attachment(store, hash5));
+        assert attachmentExists(DiodeAttachments.get_attachment(store, hash6));
+      });
+
+      await test("Should handle ring-buffer with exact boundary calculations", func() : async () {
+        // Test precise boundary calculations to catch off-by-one errors
+        
+        // Test 1: max_offset = 1000, metadata_size = 48, so max data size = 952
+        let store1 = DiodeAttachments.new(1000);
+        let hash1 = make_hash(30);
+        let data1 = Blob.fromArray(Array.tabulate<Nat8>(952, func i = Nat8.fromIntWrap(i)));
+        
+        // This should fit exactly: 952 + 48 = 1000
+        assert isOk(DiodeAttachments.write_attachment(store1, hash1, data1));
+        
+        // Test 2: Try to write one more byte (should trigger wrap)
+        let hash2 = make_hash(31);
+        let data2 = Blob.fromArray(Array.tabulate<Nat8>(953, func i = Nat8.fromIntWrap(i)));
+        
+        // This should trigger ring-buffer wrap: 953 + 48 = 1001 > 1000
+        assert isOk(DiodeAttachments.write_attachment(store1, hash2, data2));
+        
+        // First attachment should be overwritten
+        switch (DiodeAttachments.get_attachment(store1, hash1)) {
+          case (#ok(_)) { assert false; };
+          case (#err(err)) { assert err == "attachment not found"; };
+        };
+        
+        // Second should exist
+        assert attachmentExists(DiodeAttachments.get_attachment(store1, hash2));
+        
+        // Test 3: Test with exactly one byte less than boundary
+        let store2 = DiodeAttachments.new(1000);
+        let hash3 = make_hash(32);
+        let data3 = Blob.fromArray(Array.tabulate<Nat8>(951, func i = Nat8.fromIntWrap(i)));
+        
+        // This should fit: 951 + 48 = 999 < 1000
+        assert isOk(DiodeAttachments.write_attachment(store2, hash3, data3));
+        
+        // Try to write a small second attachment (should fit)
+        let hash4 = make_hash(33);
+        let data4 = Blob.fromArray([1, 2, 3, 4, 5]);
+        
+        // This should also fit: 5 + 48 = 53, total 999 + 53 = 1052 > 1000, so should wrap
+        assert isOk(DiodeAttachments.write_attachment(store2, hash4, data4));
+        
+        // First should be overwritten
+        switch (DiodeAttachments.get_attachment(store2, hash3)) {
+          case (#ok(_)) { assert false; };
+          case (#err(err)) { assert err == "attachment not found"; };
+        };
+        
+        // Second should exist
+        assert attachmentExists(DiodeAttachments.get_attachment(store2, hash4));
       });
 
       await test("Should handle error cases correctly", func() : async () {
@@ -305,7 +497,7 @@ actor {
       await test("Should handle chunk reading correctly", func() : async () {
         let store = DiodeAttachments.new(1000);
         let hash = make_hash(9);
-        let data = Blob.fromArray(Array.tabulate<Nat8>(100, func i = Nat8.fromNat(i)));
+        let data = Blob.fromArray(Array.tabulate<Nat8>(100, func i = Nat8.fromIntWrap(i)));
         
         // Write attachment
         assert isOk(DiodeAttachments.write_attachment(store, hash, data));
@@ -342,6 +534,18 @@ actor {
   private func isOk(result : Result.Result<(), Text>) : Bool {
     switch (result) {
       case (#ok()) {
+        return true;
+      };
+      case (#err(text)) {
+        Debug.print(text);
+        return false;
+      };
+    };
+  };
+
+  private func attachmentExists(result : Result.Result<DiodeAttachments.Attachment, Text>) : Bool {
+    switch (result) {
+      case (#ok(_)) {
         return true;
       };
       case (#err(text)) {
