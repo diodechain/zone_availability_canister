@@ -48,4 +48,31 @@ module {
         Region.storeNat64(wb.region, wb.end, data);
         wb.end += 8;
     };
+
+    public func writeBlob(wb: WriteableBand, offset: Nat64, data: Blob) {
+        wb.end := offset;
+        appendBlob(wb, data);
+    };
+
+    public func writeNat32(wb: WriteableBand, offset: Nat64, data: Nat32) {
+        wb.end := offset;
+        appendNat32(wb, data);
+    };
+
+    public func writeNat64(wb: WriteableBand, offset: Nat64, data: Nat64) {
+        wb.end := offset;
+        appendNat64(wb, data);
+    };
+
+    public func readBlob(wb: WriteableBand, offset: Nat64, size: Nat) : Blob {
+        return Region.loadBlob(wb.region, offset, size);
+    };
+
+    public func readNat32(wb: WriteableBand, offset: Nat64) : Nat32 {
+        return Region.loadNat32(wb.region, offset);
+    };
+
+    public func readNat64(wb: WriteableBand, offset: Nat64) : Nat64 {
+        return Region.loadNat64(wb.region, offset);
+    };
 }
