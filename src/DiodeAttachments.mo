@@ -68,7 +68,7 @@ module DiodeAttachments {
         return #err(err);
       };
       case (#ok(_offset)) {
-        switch (write_attachment_chunk(store, identity_hash, 0, data.size(), data)) {
+        switch (write_attachment_chunk(store, identity_hash, 0, data)) {
           case (#err(err)) {
             delete_attachment(store, identity_hash);
             return #err(err);
@@ -202,14 +202,14 @@ module DiodeAttachments {
     };
   };
 
-  public func write_attachment_chunk(store : AttachmentStore, identity_hash : Blob, chunk_offset : Nat64, chunk_size : Nat, chunk : Blob) : Result.Result<(), Text> {
+  public func write_attachment_chunk(store : AttachmentStore, identity_hash : Blob, chunk_offset : Nat64, chunk : Blob) : Result.Result<(), Text> {
     switch (Map.get<Blob, Nat64>(store.hash_to_offset, Map.bhash, identity_hash)) {
       case (null) {
         return #err("attachment not found");
       };
       case (?offset) {
         let meta_data = _read_metadata(store, offset);
-        if (chunk_offset + Nat64.fromNat(chunk_size) > meta_data.size) {
+        if (chunk_offset + Nat64.fromNat(chunk.size()) > meta_data.size) {
           return #err("chunk out of bounds");
         };
         if (meta_data.finalized) {
@@ -260,5 +260,9 @@ module DiodeAttachments {
         store.next_entry_offset := ?next_entry_offset;
       };
     };
+  };
+
+  public func get_usage(store : AttachmentStore) : Nat64 {
+    return WriteableBand.capacity(store.attachments);
   };
 };

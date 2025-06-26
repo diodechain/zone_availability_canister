@@ -245,4 +245,8 @@ module DiodeMessages {
       case (?value) { ?value.max_msg_id };
     };
   };
+
+  public func get_usage(store : MessageStore) : Nat64 {
+    return WriteableBand.capacity(store.inbox) + WriteableBand.capacity(store.payloads);
+  };
 };

@@ -16,6 +16,7 @@ import MetaData "./MetaData";
 import { ic } "./IC";
 import Prim "mo:⛔";
 import VetKd "VetKD";
+import DiodeAttachments "./DiodeAttachments";
 
 shared (_init_msg) actor class ZoneAvailabilityCanister(
   _args : {
@@ -33,6 +34,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   stable var zone_members : MemberCache.Cache = MemberCache.new(_args.zone_id, _args.rpc_host, _args.rpc_path, oracle_transform_function);
   stable var installation_id : Int = Time.now();
   stable var meta_data : MetaData.MetaData = MetaData.new();
+  stable var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below .7 trillion cycles, topup by .5 trillion (~65 cents)
@@ -44,9 +46,9 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     };
   });
 
-  public query func get_zone_id() : async Text {
-    zone_members.zone_id;
-  };
+  /**
+   * DiodeMessages API
+   */
 
   public shared (msg) func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
     ignore await request_topup_if_low();
@@ -111,6 +113,10 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     DiodeMessages.get_messages_by_range_for_key(dm, key_id, min_message_id, max_message_id);
   };
 
+  /**
+   * MemberCache API
+   */
+
   public query (msg) func my_role() : async Nat {
     MemberCache.get_role(zone_members, msg.caller);
   };
@@ -128,6 +134,14 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     ignore await request_topup_if_low();
     await MemberCache.update_identity_member(zone_members, public_key, identity_contract_address);
   };
+
+  public query func get_message_usage() : async Nat64 {
+    DiodeMessages.get_usage(dm);
+  };
+
+  /**
+   * MetaData API
+   */
 
   public shared (msg) func set_public_and_protected_key(public_key : Blob, vet_protected_key : Blob) {
     assert_admin(msg.caller);
@@ -167,19 +181,66 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     await MetaData.derive_vet_protector_key(meta_data, transport_public_key, target_public_key);
   };
 
-  func assert_membership(member : Principal) {
-    let role = MemberCache.get_role(zone_members, member);
-    if (role == 0) {
-      Debug.trap("Not a member of the zone");
+  /**
+   * DiodeAttachments API
+   */
+
+  public shared (msg) func write_attachment(identity_hash : Blob, data : Blob) : async Result.Result<(), Text> {
+    assert_membership(msg.caller);
+    ignore await request_topup_if_low();
+    DiodeAttachments.write_attachment(attachments, identity_hash, data);
+  };
+
+  public shared (msg) func delete_attachment(identity_hash : Blob) {
+    assert_membership(msg.caller);
+    ignore await request_topup_if_low();
+    DiodeAttachments.delete_attachment(attachments, identity_hash);
+  };
+
+  public shared (msg) func get_attachment(identity_hash : Blob) : async Result.Result<Blob, Text> {
+    assert_membership(msg.caller);
+    ignore await request_topup_if_low();
+    switch (DiodeAttachments.get_attachment(attachments, identity_hash)) {
+      case (#err(e)) {
+        #err(e);
+      };
+      case (#ok(attachment)) {
+        #ok(attachment.ciphertext);
+      };
     };
   };
 
-  func assert_admin(member : Principal) {
-    let role = MemberCache.get_role(zone_members, member);
-    if (role < 400) {
-      Debug.trap("Not an admin");
-    };
+  public shared (msg) func allocate_attachment(identity_hash : Blob, size : Nat64) : async Result.Result<Nat64, Text> {
+    assert_membership(msg.caller);
+    ignore await request_topup_if_low();
+    DiodeAttachments.allocate_attachment(attachments, identity_hash, size);
   };
+
+  public shared (msg) func write_attachment_chunk(identity_hash : Blob, offset : Nat64, data : Blob) : async Result.Result<(), Text> {
+    assert_membership(msg.caller);
+    ignore await request_topup_if_low();
+    DiodeAttachments.write_attachment_chunk(attachments, identity_hash, offset, data);
+  };
+
+  public shared (msg) func finalize_attachment(identity_hash : Blob) : async Result.Result<(), Text> {
+    assert_membership(msg.caller);
+    ignore await request_topup_if_low();
+    DiodeAttachments.finalize_attachment(attachments, identity_hash);
+  };
+
+  public shared (msg) func read_attachment_chunk(identity_hash : Blob, offset : Nat64, size : Nat) : async Result.Result<Blob, Text> {
+    assert_membership(msg.caller);
+    ignore await request_topup_if_low();
+    DiodeAttachments.read_attachment_chunk(attachments, identity_hash, offset, size);
+  };
+
+  public query func get_attachment_usage() : async Nat64 {
+    DiodeAttachments.get_usage(attachments);
+  };
+
+  /**
+   * Public System API
+   */
 
   // From https://github.com/CycleOperators/cycles-manager/blob/main/example/Child.mo
   public shared func request_topup_if_low() : async CyclesManager.TransferCyclesResult {
@@ -193,6 +254,10 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   public shared func test_record_input(record : (Nat32, Nat32)) : async Nat32 {
     let (a, b) = record;
     a + b;
+  };
+
+  public query func get_zone_id() : async Text {
+    zone_members.zone_id;
   };
 
   public query func get_cycles_balance() : async Nat {
@@ -213,5 +278,23 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public query func get_logical_stable_storage_size() : async Nat {
     Prim.rts_logical_stable_memory_size();
+  };
+
+  /**
+   * Private functions
+   */
+
+  private func assert_membership(member : Principal) {
+    let role = MemberCache.get_role(zone_members, member);
+    if (role == 0) {
+      Debug.trap("Not a member of the zone");
+    };
+  };
+
+  private func assert_admin(member : Principal) {
+    let role = MemberCache.get_role(zone_members, member);
+    if (role < 400) {
+      Debug.trap("Not an admin");
+    };
   };
 };

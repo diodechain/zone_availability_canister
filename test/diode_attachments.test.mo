@@ -55,7 +55,7 @@ actor {
                 assert metadata.size == 5;
                 assert metadata.timestamp > 0;
               };
-              case (#err(err)) {
+              case (#err(_)) {
                 assert false; // Should not error
               };
             };
@@ -80,7 +80,7 @@ actor {
                 assert attachment.finalized == true;
                 assert attachment.timestamp > 0;
               };
-              case (#err(err)) {
+              case (#err(_)) {
                 assert false; // Should not error
               };
             };
@@ -99,7 +99,7 @@ actor {
               case (#ok(offset)) {
                 assert offset >= 0;
               };
-              case (#err(err)) {
+              case (#err(_)) {
                 assert false; // Should not error
               };
             };
@@ -108,8 +108,8 @@ actor {
             let chunk1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i)));
             let chunk2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 50)));
 
-            assert isOk(DiodeAttachments.write_attachment_chunk(store, hash, 0, 50, chunk1));
-            assert isOk(DiodeAttachments.write_attachment_chunk(store, hash, 50, 50, chunk2));
+            assert isOk(DiodeAttachments.write_attachment_chunk(store, hash, 0, chunk1));
+            assert isOk(DiodeAttachments.write_attachment_chunk(store, hash, 50, chunk2));
 
             // Try to read before finalization (should fail)
             switch (DiodeAttachments.read_attachment_chunk(store, hash, 0, 10)) {
@@ -129,7 +129,7 @@ actor {
               case (#ok(chunk)) {
                 assert chunk.size() == 10;
               };
-              case (#err(err)) {
+              case (#err(_)) {
                 assert false; // Should not error
               };
             };
@@ -141,7 +141,7 @@ actor {
                 assert attachment.finalized == true;
                 assert attachment.ciphertext.size() == 100;
               };
-              case (#err(err)) {
+              case (#err(_)) {
                 assert false; // Should not error
               };
             };
@@ -160,7 +160,7 @@ actor {
 
             // Try to write chunk to finalized attachment (should fail)
             let new_chunk = Blob.fromArray([4, 5, 6]);
-            switch (DiodeAttachments.write_attachment_chunk(store, hash, 0, 3, new_chunk)) {
+            switch (DiodeAttachments.write_attachment_chunk(store, hash, 0, new_chunk)) {
               case (#ok(_)) {
                 assert false; // Should fail - already finalized
               };
