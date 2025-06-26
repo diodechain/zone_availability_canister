@@ -15,16 +15,18 @@ module {
     bench.rows(["Regions"]);
     bench.cols(["1", "10", "100"]); //, "1000", "10000"]);
 
-    bench.runner(func(row, col) {
-      let ?n = Nat.fromText(col);
-      
-      for (i in Iter.range(0, n - 1)) {
-        var reg = Region.new();
-        let _ = Region.grow(reg, 1);
-        assert Region.size(reg) == 1;
-        Region.storeBlob(reg, 0, make_blob(100, i));
-      };
-    });
+    bench.runner(
+      func(row, col) {
+        let ?n = Nat.fromText(col);
+
+        for (i in Iter.range(0, n - 1)) {
+          var reg = Region.new();
+          let _ = Region.grow(reg, 1);
+          assert Region.size(reg) == 1;
+          Region.storeBlob(reg, 0, make_blob(100, i));
+        };
+      }
+    );
 
     bench;
   };

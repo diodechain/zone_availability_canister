@@ -1,6 +1,6 @@
-import {endsWith; size} "mo:base/Text";
-import {ic} "IC";
-import {trap} "mo:base/Debug";
+import { endsWith; size } "mo:base/Text";
+import { ic } "IC";
+import { trap } "mo:base/Debug";
 import Blob "mo:base/Blob";
 import Cycles "mo:base/ExperimentalCycles";
 import CyclesManager "mo:cycles-manager/CyclesManager";
@@ -11,7 +11,7 @@ import ZoneAvailabilityCanister "ZoneAvailabilityCanister";
 import BTree "mo:btree/BTree";
 import Iter "mo:base/Iter";
 
-// A simple battery canister actor example that implements the cycles_manager_transferCycles API of the CyclesManager.Interface 
+// A simple battery canister actor example that implements the cycles_manager_transferCycles API of the CyclesManager.Interface
 
 actor CanisterFactory {
   // Initializes a cycles manager
@@ -38,10 +38,10 @@ actor CanisterFactory {
   // Allows canisters to request cycles from this "battery canister" that implements
   // the cycles manager
   public shared ({ caller }) func cycles_manager_transferCycles(
-    cyclesRequested: Nat
-  ): async CyclesManager.TransferCyclesResult {
+    cyclesRequested : Nat
+  ) : async CyclesManager.TransferCyclesResult {
     if (not isCanister(caller)) trap("Calling principal must be a canister");
-    
+
     let result = await* CyclesManager.transferCycles({
       cyclesManager;
       canister = caller;
@@ -55,7 +55,7 @@ actor CanisterFactory {
   public shared func create_zone_availability_canister(
     zone_id : Text,
     rpc_host : Text,
-    rpc_path : Text
+    rpc_path : Text,
   ) : async Principal {
 
     // 1 trillion cycles is ~ 1.30 USD
@@ -68,23 +68,22 @@ actor CanisterFactory {
 
     let principal = Principal.fromActor(canister);
 
-    CyclesManager.addChildCanister(cyclesManager, principal, {
-      // This topup rule allows 1 Trillion cycles every 24 hours
-      quota = ?(#rate({
-        maxAmount = 1_000_000_000_000;
-        durationInSeconds = 24 * 60 * 60;
-      }));
-    });
+    CyclesManager.addChildCanister(
+      cyclesManager,
+      principal,
+      {
+        // This topup rule allows 1 Trillion cycles every 24 hours
+        quota = ?(#rate({ maxAmount = 1_000_000_000_000; durationInSeconds = 24 * 60 * 60 }));
+      },
+    );
 
     principal;
   };
 
-
   func isCanister(p : Principal) : Bool {
     let principal_text = Principal.toText(p);
     // Canister principals have 27 characters
-    size(principal_text) == 27
-    and
+    size(principal_text) == 27 and
     // Canister principals end with "-cai"
     endsWith(principal_text, #text "-cai");
   };
@@ -93,18 +92,18 @@ actor CanisterFactory {
     Cycles.balance();
   };
 
-  public shared({ caller }) func install_code(canisterId: Principal, wasmModule: Blob, arg : Blob): async() {
-      if (not isAdmin(caller)) {
-          throw Error.reject("Unauthorized access. Caller is not an admin.");
-      };
+  public shared ({ caller }) func install_code(canisterId : Principal, wasmModule : Blob, arg : Blob) : async () {
+    if (not isAdmin(caller)) {
+      throw Error.reject("Unauthorized access. Caller is not an admin.");
+    };
 
-      await ic.install_code({
-        canister_id = canisterId;
-        arg = arg;
-        wasm_module = wasmModule;
-        mode = #reinstall;
-        sender_canister_version = null;
-      });
+    await ic.install_code({
+      canister_id = canisterId;
+      arg = arg;
+      wasm_module = wasmModule;
+      mode = #reinstall;
+      sender_canister_version = null;
+    });
   };
 
   func admin_principal() : Principal {
@@ -116,20 +115,16 @@ actor CanisterFactory {
   };
 
   public shared func refund() : async ?ICRC1.TransferResult {
-    let cycles_ledger = actor("um5iw-rqaaa-aaaaq-qaaba-cai") : ICRC1.Service;
-    let balance = await cycles_ledger.icrc1_balance_of({ owner = Principal.fromActor(CanisterFactory); subaccount = null });
+    let cycles_ledger = actor ("um5iw-rqaaa-aaaaq-qaaba-cai") : ICRC1.Service;
+    let balance = await cycles_ledger.icrc1_balance_of({
+      owner = Principal.fromActor(CanisterFactory);
+      subaccount = null;
+    });
     if (balance == 0) return null;
     let fee = await cycles_ledger.icrc1_fee();
     if (balance <= fee) return null;
 
-    ?(await cycles_ledger.icrc1_transfer({
-      to = { owner = admin_principal(); subaccount = null };
-      amount = balance - fee;
-      fee = null;
-      memo = null;
-      created_at_time = null;
-      from_subaccount = null;
-    }));
+    ?(await cycles_ledger.icrc1_transfer({ to = { owner = admin_principal(); subaccount = null }; amount = balance - fee; fee = null; memo = null; created_at_time = null; from_subaccount = null }));
   };
 
   public query func get_version() : async Nat {
@@ -154,9 +149,12 @@ actor CanisterFactory {
 
   public query func get_cycles_manager_children() : async [Principal] {
     BTree.entries(cyclesManager.childCanisterMap)
-    |> Iter.map(_, func (i : (Principal, Any)) : Principal {
+    |> Iter.map(
+      _,
+      func(i : (Principal, Any)) : Principal {
         i.0;
-    })
+      },
+    )
     |> Iter.toArray(_);
   };
-}
+};

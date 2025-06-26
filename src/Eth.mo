@@ -9,7 +9,7 @@ import SHA3 "mo:sha3";
 import Types "./Types";
 
 module {
-  let ic : Types.IC = actor("aaaaa-aa");
+  let ic : Types.IC = actor ("aaaaa-aa");
 
   public func addressFromPrincipal(who : Principal) : async ?Blob {
     let caller = Principal.toBlob(who);
@@ -17,20 +17,20 @@ module {
     try {
       Debug.print("Getting public key");
       let { public_key } = await ic.ecdsa_public_key({
-          canister_id = null;
-          derivation_path = [ caller ];
-          key_id = { curve = #secp256k1; name = "dfx_test_key" };
+        canister_id = null;
+        derivation_path = [caller];
+        key_id = { curve = #secp256k1; name = "dfx_test_key" };
       });
 
       Debug.print("Converting public key to address");
       let ret = addressFromPublicKey(public_key);
       Debug.print("Got address: " # Base16.encode(ret));
-      ?ret
+      ?ret;
     } catch (e) {
       Debug.print("Error getting public key");
       Debug.print(Error.message(e));
-      null
-    }
+      null;
+    };
   };
 
   func derFromPublicKey(public_key : Blob) : Blob {
@@ -41,24 +41,24 @@ module {
   public func addressFromPublicKey(public_key : Blob) : Blob {
     var pubkey = Blob.toArray(public_key);
     if (Array.size(pubkey) != 65) {
-      Debug.trap("Invalid public key size: " # debug_show(Array.size(pubkey)));
+      Debug.trap("Invalid public key size: " # debug_show (Array.size(pubkey)));
     };
     Debug.print("Pubkey: " # Base16.encode(Blob.fromArray(pubkey)));
     let subject = Array.subArray(pubkey, 1, 64);
     var sha = SHA3.Keccak(256);
     sha.update(subject);
     let result = sha.finalize();
-    Blob.fromArray(Array.subArray(result, 12, 20))
+    Blob.fromArray(Array.subArray(result, 12, 20));
   };
 
   public func principalFromPublicKey(public_key : Blob) : Principal {
     var pubkey = Blob.toArray(public_key);
     if (Array.size(pubkey) != 65) {
-      Debug.trap("Invalid public key size: " # debug_show(Array.size(pubkey)));
+      Debug.trap("Invalid public key size: " # debug_show (Array.size(pubkey)));
     };
     Debug.print("Pubkey: " # Base16.encode(Blob.fromArray(pubkey)));
     let hash = Blob.toArray(Sha256.fromBlob(#sha224, derFromPublicKey(public_key)));
     let id = Blob.fromArray(Array.append<Nat8>(hash, [2]));
-    Principal.fromBlob(id)
+    Principal.fromBlob(id);
   };
 };

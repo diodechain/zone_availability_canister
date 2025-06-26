@@ -8,4 +8,4 @@ module {
   public let WriteableBand = wb;
   public let MetaData = md;
   public let DiodeAttachments = da;
-}
+};

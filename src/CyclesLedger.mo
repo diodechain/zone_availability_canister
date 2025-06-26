@@ -89,19 +89,19 @@ module {
   public type DepositArgs = { to : Account; memo : ?Blob };
   public type DepositResult = { balance : Nat; block_index : BlockIndex };
   public type GetArchivesArgs = { from : ?Principal };
-  public type GetArchivesResult = [
-    { end : Nat; canister_id : Principal; start : Nat }
-  ];
+  public type GetArchivesResult = [{
+    end : Nat;
+    canister_id : Principal;
+    start : Nat;
+  }];
   public type GetBlocksArgs = [{ start : Nat; length : Nat }];
   public type GetBlocksResult = {
     log_length : Nat;
     blocks : [{ id : Nat; block : Value }];
-    archived_blocks : [
-      {
-        args : GetBlocksArgs;
-        callback : shared query GetBlocksArgs -> async GetBlocksResult;
-      }
-    ];
+    archived_blocks : [{
+      args : GetBlocksArgs;
+      callback : shared query GetBlocksArgs -> async GetBlocksResult;
+    }];
   };
   public type HttpRequest = {
     url : Text;
@@ -239,13 +239,13 @@ module {
   };
   public type Self = LedgerArgs -> async actor {
     create_canister : shared CreateCanisterArgs -> async {
-        #Ok : CreateCanisterSuccess;
-        #Err : CreateCanisterError;
-      };
+      #Ok : CreateCanisterSuccess;
+      #Err : CreateCanisterError;
+    };
     create_canister_from : shared CreateCanisterFromArgs -> async {
-        #Ok : CreateCanisterSuccess;
-        #Err : CreateCanisterFromError;
-      };
+      #Ok : CreateCanisterSuccess;
+      #Err : CreateCanisterFromError;
+    };
     deposit : shared DepositArgs -> async DepositResult;
     http_request : shared query HttpRequest -> async HttpResponse;
     icrc1_balance_of : shared query Account -> async Nat;
@@ -258,29 +258,29 @@ module {
     icrc1_symbol : shared query () -> async Text;
     icrc1_total_supply : shared query () -> async Nat;
     icrc1_transfer : shared TransferArgs -> async {
-        #Ok : BlockIndex;
-        #Err : TransferError;
-      };
+      #Ok : BlockIndex;
+      #Err : TransferError;
+    };
     icrc2_allowance : shared query AllowanceArgs -> async Allowance;
     icrc2_approve : shared ApproveArgs -> async {
-        #Ok : Nat;
-        #Err : ApproveError;
-      };
+      #Ok : Nat;
+      #Err : ApproveError;
+    };
     icrc2_transfer_from : shared TransferFromArgs -> async {
-        #Ok : Nat;
-        #Err : TransferFromError;
-      };
+      #Ok : Nat;
+      #Err : TransferFromError;
+    };
     icrc3_get_archives : shared query GetArchivesArgs -> async GetArchivesResult;
     icrc3_get_blocks : shared query GetBlocksArgs -> async GetBlocksResult;
     icrc3_get_tip_certificate : shared query () -> async ?DataCertificate;
     icrc3_supported_block_types : shared query () -> async [SupportedBlockType];
     withdraw : shared WithdrawArgs -> async {
-        #Ok : BlockIndex;
-        #Err : WithdrawError;
-      };
+      #Ok : BlockIndex;
+      #Err : WithdrawError;
+    };
     withdraw_from : shared WithdrawFromArgs -> async {
-        #Ok : BlockIndex;
-        #Err : WithdrawFromError;
-      };
-  }
-}
+      #Ok : BlockIndex;
+      #Err : WithdrawFromError;
+    };
+  };
+};
