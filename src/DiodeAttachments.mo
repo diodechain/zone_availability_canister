@@ -7,6 +7,22 @@ import Map "mo:map/Map";
 import WriteableBand "WriteableBand";
 
 module DiodeAttachments {
+    /*
+    AttachmentStore is a writeable ring-buffer of attachments. When the size limit is reached, the ring-buffer is 
+    starting to overwrite the oldest attachment.
+
+    To create a new attachment there are two variants for small and large attachments respectively:
+    - small attachments can be created and written in one function call using write_attachment()
+    - large attachments are stored in three phases:
+        - allocate_attachment()
+        - n times write_attachment_chunk()
+        - finalize_attachment()
+
+    After the attachment is finalized, it can be read using read_attachment() and read_attachment_chunk(). 
+    Small attachments are finalized immediately after calling write_attachment()
+    */
+
+    
     public type Attachment = {
         identity_hash : Blob;
         timestamp : Nat32;
@@ -31,14 +47,45 @@ module DiodeAttachments {
         var hash_to_offset : Map.Map<Blob, Nat64>;
     };
 
-    public func new() : AttachmentStore {
+    public func new(max_offset : Nat64) : AttachmentStore {
         return {
             var attachments = WriteableBand.new();
             var first_entry_offset = 0;
             var end_offset = 0;
-            var max_offset = 128 * 1024 * 1024;
+            var max_offset = max_offset;
             var next_entry_offset = null;
             var hash_to_offset = Map.new<Blob, Nat64>();
+        };
+    };
+
+    public func set_max_offset(store : AttachmentStore, max_offset : Nat64) {
+        store.max_offset := max_offset;
+    };
+
+    public func write_attachment(store : AttachmentStore, identity_hash : Blob, data : Blob) : Result.Result<(), Text> {
+        switch (allocate_attachment(store, identity_hash, Nat64.fromNat(data.size()))) {
+            case (#err(err)) {
+                return #err(err);
+            };
+            case (#ok(_offset)) {
+                switch (write_attachment_chunk(store, identity_hash, 0, data.size(), data)) {
+                    case (#err(err)) {
+                        delete_attachment(store, identity_hash);
+                        return #err(err);
+                    };
+                    case (#ok()) {
+                        switch (finalize_attachment(store, identity_hash)) {
+                            case (#err(err)) {
+                                delete_attachment(store, identity_hash);
+                                return #err(err);
+                            };
+                            case (#ok()) {
+                                return #ok();
+                            };
+                        };
+                    };
+                };
+            };
         };
     };
 
@@ -87,9 +134,8 @@ module DiodeAttachments {
         return #ok(offset);
     };
 
-    public func delete_attachment(store : AttachmentStore, identity_hash : Blob) : Result.Result<(), Text> {
+    public func delete_attachment(store : AttachmentStore, identity_hash : Blob) {
         Map.delete<Blob, Nat64>(store.hash_to_offset, Map.bhash, identity_hash);
-        return #ok();
     };
 
     public func get_attachment(store : AttachmentStore, identity_hash : Blob) : Result.Result<Attachment, Text> {
