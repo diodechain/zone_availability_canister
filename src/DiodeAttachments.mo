@@ -99,7 +99,7 @@ module DiodeAttachments {
             return #err("identity_hash must be 32 bytes");
         };
 
-        if (size > store.max_offset) {
+        if (metadata_size + size > store.max_offset) {
             return #err("size is too large");
         };
 
@@ -112,7 +112,7 @@ module DiodeAttachments {
             };
         };
 
-        // Entry will not in the current space
+        // Entry will not fit in the current space, wrap around to the beginning of the band
         if (store.end_offset + size + metadata_size > store.max_offset) {
             store.end_offset := 0;
             store.next_entry_offset := ?0;
@@ -130,6 +130,8 @@ module DiodeAttachments {
         WriteableBand.appendNat32(store.attachments, Nat32.fromIntWrap(now()));
         WriteableBand.appendNat32(store.attachments, 0); // 0 means not finalized
         WriteableBand.appendNat64(store.attachments, size);
+        // We're writing 0 to the timestamp of the next entry to mark it as empty
+        WriteableBand.writeNat32(store.attachments, offset + metadata_size + size + 32, 0);
         store.end_offset += size + metadata_size;
         Map.set<Blob, Nat64>(store.hash_to_offset, Map.bhash, identity_hash, offset);
         return #ok(offset);
@@ -228,23 +230,25 @@ module DiodeAttachments {
                 return;
             };
             case (?offset) {
-                let identity_hash = WriteableBand.readBlob(store.attachments, offset, 32);
-                // let timestamp = WriteableBand.readNat32(store.attachments, offset + 32);
-                // Clear the timestamp to indicate that the entry is free
+                let meta_data = _read_metadata(store, offset);
                 WriteableBand.writeNat32(store.attachments, offset + 32, 0);
-                let size = WriteableBand.readNat64(store.attachments, offset + 32 + 4); 
-                Map.delete<Blob, Nat64>(store.hash_to_offset, Map.bhash, identity_hash);
-                var next_entry_offset = offset + metadata_size + size;
+                delete_attachment(store, meta_data.identity_hash);
+                var next_entry_offset = offset + metadata_size + meta_data.size;
                 // Wrap around to the beginning of the band
-                if (next_entry_offset + metadata_size + 1 > store.max_offset) {
-                    store.next_entry_offset := ?0;
-                    next_entry_offset := 0;
-                };
-                // This might be the beginning of the band (0) or the next entry somewhere in the middle
-                let next_timestamp = WriteableBand.readNat32(store.attachments, next_entry_offset + 32);
-                if (next_timestamp == 0) {
+                let max_size = Nat64.min(store.max_offset, WriteableBand.capacity(store.attachments));
+                if (next_entry_offset + metadata_size + 1 > max_size) {
                     store.next_entry_offset := null;
-                }
+                    return;
+                };
+
+                // This might be the beginning of the band (0) or the next entry somewhere in the middle
+                let next_meta_data = _read_metadata(store, next_entry_offset);
+                if (next_meta_data.timestamp == 0) {
+                    store.next_entry_offset := null;
+                    return;
+                };
+
+                store.next_entry_offset := ?next_entry_offset;
             };
         };
     };
