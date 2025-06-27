@@ -249,4 +249,8 @@ module DiodeMessages {
   public func get_usage(store : MessageStore) : Nat64 {
     return WriteableBand.capacity(store.inbox) + WriteableBand.capacity(store.payloads);
   };
+
+  public func get_count(store : MessageStore) : Nat {
+    return Map.size(store.message_index);
+  };
 };

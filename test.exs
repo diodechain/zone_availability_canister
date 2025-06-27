@@ -304,6 +304,15 @@ defmodule Test do
     wallet
   end
 
+  # Test wallet
+  def w() do
+    Wallet.from_privkey(
+        DiodeClient.Base16.decode(
+          "0xb6dbce9418872c4b8f5a10a5778e247c60cdb0265f222c0bfdbe565cfe63d64a"
+        )
+      )
+  end
+
   def run() do
     {decoded, ""} =
       <<68, 73, 68, 76, 1, 107, 2, 156, 194, 1, 127, 229, 142, 180, 2, 113, 1, 0, 0>>
@@ -350,29 +359,22 @@ defmodule Test do
       })
       |> DiodeClient.Base16.encode()
 
-    w =
-      Wallet.from_privkey(
-        DiodeClient.Base16.decode(
-          "0xb6dbce9418872c4b8f5a10a5778e247c60cdb0265f222c0bfdbe565cfe63d64a"
-        )
-      )
-
-    IO.puts("wallet_textual: #{wallet_textual(w)}")
-    IO.puts("wallet_address: #{Wallet.printable(w)}")
+    IO.puts("wallet_textual: #{wallet_textual(w())}")
+    IO.puts("wallet_address: #{Wallet.printable(w())}")
     canister_id = default_canister_id()
 
-    [6] = call(canister_id, w, "get_logical_stable_storage_size", [], [])
-    [6] = call(canister_id, w, "get_stable_storage_size", [], [])
-    [201] = call(canister_id, w, "get_version", [], [])
+    [6] = call(canister_id, w(), "get_logical_stable_storage_size", [], [])
+    [6] = call(canister_id, w(), "get_stable_storage_size", [], [])
+    [201] = call(canister_id, w(), "get_version", [], [])
 
     [3] =
-      call(canister_id, w, "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
+      call(canister_id, w(), "test_record_input", [{:record, [{0, :nat32}, {1, :nat32}]}], [{1, 2}])
 
     identity_contract = DiodeClient.Base16.decode("0x08ff68fe9da498223d4fc953bc4c336ec5726fec")
 
     [200] =
-      call(canister_id, w, "update_identity_role", [:blob, :blob], [
-        Wallet.pubkey_long!(w),
+      call(canister_id, w(), "update_identity_role", [:blob, :blob], [
+        Wallet.pubkey_long!(w()),
         identity_contract
       ])
 
@@ -384,43 +386,34 @@ defmodule Test do
     IO.puts("certified_height: #{height}")
     IO.puts("root_key: #{inspect(Base.encode16(root_key.value))}")
 
-    [n] = query(canister_id, w, "get_max_message_id")
+    [n] = query(canister_id, w(), "get_max_message_id")
 
     message = "hello diode #{n}"
-    key_id = make_key(w)
-    isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
+    key_id = make_key(w())
+    isOk(call(canister_id, w(), "add_message", [:blob, :blob], [key_id, message]))
     n2 = n + 1
-    [^n2] = query(canister_id, w, "get_max_message_id")
+    [^n2] = query(canister_id, w(), "get_max_message_id")
 
     message = "hello diode #{n2}"
-    key_id = make_key(w)
-    isOk(call(canister_id, w, "add_message", [:blob, :blob], [key_id, message]))
+    key_id = make_key(w())
+    isOk(call(canister_id, w(), "add_message", [:blob, :blob], [key_id, message]))
     n3 = n2 + 1
-    [^n3] = query(canister_id, w, "get_max_message_id")
+    [^n3] = query(canister_id, w(), "get_max_message_id")
 
-    test_batch_write(w, canister_id, 10)
-    {time, _} = :timer.tc(fn -> test_batch_write(w, canister_id, 10_000) end)
+    test_batch_write(w(), canister_id, 10)
+    {time, _} = :timer.tc(fn -> test_batch_write(w(), canister_id, 10_000) end)
     IO.puts("Writing 10k messages took: #{div(time, 1000)} milliseconds")
-    test_batch_read(w, canister_id, 1, 1000)
+    test_batch_read(w(), canister_id, 1, 1000)
   end
 
   def vetkd() do
-    #System.put_env("ICP_DOMAIN", "https://ic0.app")
-    #canister_id = "kkcrz-5qaaa-aaaao-qkbzq-cai"
+    # This test only works against the VetKeyTest.mo canister.
     canister_id = "uxrrr-q7777-77774-qaaaq-cai"
-
-    w =
-      Wallet.from_privkey(
-        DiodeClient.Base16.decode(
-          "0xb6dbce9418872c4b8f5a10a5778e247c60cdb0265f222c0bfdbe565cfe63d64a"
-        )
-      )
-
     context = <<1>>
     key_id = %{name: "test_key_1", curve: {:bls12_381_g2, nil}}
 
     [_pubkey] =
-      call(canister_id, w, "vetkd_public_key", [
+      call(canister_id, w(), "vetkd_public_key", [
         {:opt, :principal},
         :blob,
         {:record, %{name: :text, curve: {:variant, %{bls12_381_g2: :null}}}}
@@ -428,8 +421,8 @@ defmodule Test do
 
       # Asserting that using different transport encryptions
       # actually do return the same result.
-      privkey = vetkd_derive_key(canister_id, w)
-      ^privkey = vetkd_derive_key(canister_id, w)
+      privkey = vetkd_derive_key(canister_id, w())
+      ^privkey = vetkd_derive_key(canister_id, w())
   end
 
   defp vetkd_derive_key(canister_id, w) do
@@ -464,6 +457,24 @@ defmodule Test do
     Curve.add(c3, Curve.neg(c1_tsk)) |> Curve.normalize()
   end
 
+  def attachments() do
+    canister_id = "uxrrr-q7777-77774-qaaaq-cai"
+    identity_contract = DiodeClient.Base16.decode("0x08ff68fe9da498223d4fc953bc4c336ec5726fec")
+
+    [200] =
+      call(canister_id, w(), "update_identity_role", [:blob, :blob], [
+        Wallet.pubkey_long!(w()),
+        identity_contract
+      ])
+
+    id = :crypto.hash(:sha256, "hello diode")
+
+    isOk(call(canister_id, w(), "write_attachment", [:blob, :blob], [id, "this should be encrypted"]))
+    [{_, "this should be encrypted"}] = call(canister_id, w(), "get_attachment", [:blob], [id])
+
+
+  end
+
   def test_batch_write(w, canister_id, size \\ 10) do
     key_id = make_key(w)
     n = System.os_time(:nanosecond)
@@ -475,7 +486,7 @@ defmodule Test do
       end)
       |> Enum.reverse()
 
-    isOk(call(canister_id, w, "add_messages", type_spec, [messages]))
+    isOk(call(canister_id, w(), "add_messages", type_spec, [messages]))
   end
 
   def test_batch_read(w, canister_id, start, size \\ 10) do
@@ -528,9 +539,8 @@ defmodule Test do
 
   def anomaly_benchmark() do
     :persistent_term.put(:print_requests?, false)
-    w = Wallet.new()
     canister_id = default_canister_id()
-    test_batch_write(w, canister_id, 20000)
+    test_batch_write(w(), canister_id, 20000)
     cnt = :atomics.new(1, [])
     next = fn -> rem(:atomics.add_get(cnt, 1, 1), 10_000) + 1 end
 
@@ -539,7 +549,7 @@ defmodule Test do
     [650, 651, 652, 653, 654, 655, 656, 657, 658, 659, 660]
     |> Enum.map(fn size ->
       IO.puts("Reading #{size} messages")
-      test_batch_read(w, canister_id, next.(), size)
+      test_batch_read(w(), canister_id, next.(), size)
     end)
 
     :persistent_term.put(:print_requests?, false)
@@ -588,6 +598,11 @@ case System.argv() do
   ["vetkd"] ->
     Test.ensure_service()
     Test.vetkd()
+    System.halt(0)
+
+  ["attachments"] ->
+    Test.ensure_service()
+    Test.attachments()
     System.halt(0)
 
   ["test"] ->

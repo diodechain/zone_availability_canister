@@ -265,4 +265,12 @@ module DiodeAttachments {
   public func get_usage(store : AttachmentStore) : Nat64 {
     return WriteableBand.capacity(store.attachments);
   };
+
+  public func get_max_usage(store : AttachmentStore) : Nat64 {
+    return store.max_offset;
+  };
+
+  public func get_count(store : AttachmentStore) : Nat {
+    return Map.size(store.hash_to_offset);
+  };
 };

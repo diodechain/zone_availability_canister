@@ -137,6 +137,10 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     DiodeMessages.get_usage(dm);
   };
 
+  public query func get_message_count() : async Nat {
+    DiodeMessages.get_count(dm);
+  };
+
   /**
    * MetaData API
    */
@@ -234,6 +238,14 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
 
   public query func get_attachment_usage() : async Nat64 {
     DiodeAttachments.get_usage(attachments);
+  };
+
+  public query func get_attachment_max_usage() : async Nat64 {
+    DiodeAttachments.get_max_usage(attachments);
+  };
+
+  public query func get_attachment_count() : async Nat {
+    DiodeAttachments.get_count(attachments);
   };
 
   /**
