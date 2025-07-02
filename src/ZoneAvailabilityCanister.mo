@@ -212,6 +212,12 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     };
   };
 
+  public shared (msg) func get_attachment_metadata(identity_hash : Blob) : async Result.Result<DiodeAttachments.AttachmentMetadata, Text> {
+    assert_membership(msg.caller);
+    ignore await request_topup_if_low();
+    DiodeAttachments.get_attachment_metadata(attachments, identity_hash);
+  };
+
   public shared (msg) func allocate_attachment(identity_hash : Blob, size : Nat64) : async Result.Result<Nat64, Text> {
     assert_membership(msg.caller);
     ignore await request_topup_if_low();
@@ -279,7 +285,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    300;
+    301;
   };
 
   public query func get_stable_storage_size() : async Nat {
