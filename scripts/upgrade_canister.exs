@@ -1,5 +1,5 @@
 #!/usr/bin/env elixir
-Mix.install([:icp_agent, {:candid, "~> 1.1.0", override: true}])
+Mix.install([:icp_agent, :candid])
 :erlang.system_flag(:backtrace_depth, 30)
 
 w =
@@ -9,7 +9,7 @@ w =
   |> DiodeClient.Wallet.from_privkey()
 
 case System.argv() do
-  [env, destination_text, chain] ->
+  [env, destination_text] ->
     factory =
       case env do
         "local" ->
@@ -28,9 +28,19 @@ case System.argv() do
       File.read!("./.dfx/local/canisters/ZoneAvailabilityCanister/ZoneAvailabilityCanister.wasm")
 
     [zone_id] = ICPAgent.query(destination_text, w, "get_zone_id")
-    [version] = ICPAgent.query(destination_text, w, "get_version")
+    IO.puts("ZoneID: #{zone_id}")
+    account = DiodeClient.Base16.decode(zone_id)
+    DiodeClient.interface_add()
 
-    IO.puts("Current canister version: #{version}")
+    chain = cond do
+      DiodeClient.Shell.Moonbeam.get_account_root(account) != nil -> "moonbeam"
+      DiodeClient.Shell.get_account_root(account) != nil -> "diode"
+      true -> raise "Zone not found on-chain"
+    end
+
+    IO.puts("Chain: #{chain}")
+    #[version] = ICPAgent.query(destination_text, w, "get_version")
+    #IO.puts("Current canister version: #{version}")
 
     {rpc_host, rpc_path} =
       case chain do
@@ -53,7 +63,7 @@ case System.argv() do
     args = Candid.encode_parameters([{:record, type}], [values])
 
     [] =
-      ICPAgent.call(factory, w, "install_code", [:principal, :blob, :blob], [
+      ICPAgent.call(factory, w, "upgrade_code", [:principal, :blob, :blob], [
         destination,
         wasm,
         args
@@ -71,5 +81,5 @@ case System.argv() do
     IO.puts("Done! Review at: #{url}#{destination_text}")
 
   _ ->
-    IO.puts("Usage: upgrade_canister.exs (local|ic) <destination> (moonbeam|diode)")
+    IO.puts("Usage: upgrade_canister.exs (local|ic) <destination>")
 end

@@ -50,6 +50,28 @@ actor CanisterFactory {
     result;
   };
 
+  public shared func cycles_manager_transferCyclesToCanister(
+    canisterId : Principal,
+  ) : async CyclesManager.TransferCyclesResult {
+    if (not isCanister(canisterId)) trap("canisterId principal must be a canister");
+
+    let status = await ic.canister_status({
+      canister_id = canisterId;
+    });
+    let cycles_balance = status.cycles;
+    if (cycles_balance >= 700_000_000_000) {
+      trap("Canister has enough cycles");
+    };
+
+    let result = await* CyclesManager.transferCycles({
+      cyclesManager;
+      canister = canisterId;
+      cyclesRequested = 700_000_000_000 - cycles_balance;
+    });
+    result;
+
+  };
+
   // Creating a new zone availability canister
   // This adds a canister with a 1 trillion cycles allowed per 24 hours cycles quota
   public shared func create_zone_availability_canister(
@@ -106,6 +128,28 @@ actor CanisterFactory {
     });
   };
 
+  public shared ({ caller }) func upgrade_code(canisterId : Principal, wasmModule : Blob, arg : Blob) : async () {
+    if (not isAdmin(caller)) {
+      throw Error.reject("Unauthorized access. Caller is not an admin.");
+    };
+
+    await ic.stop_canister({
+      canister_id = canisterId;
+    });
+
+    await ic.install_code({
+      canister_id = canisterId;
+      arg = arg;
+      wasm_module = wasmModule;
+      mode = #upgrade(null);
+      sender_canister_version = null;
+    });
+
+    await ic.start_canister({
+      canister_id = canisterId;
+    });
+  };
+
   func admin_principal() : Principal {
     Principal.fromText("mnkyz-mnbtr-dsmec-2mbve-2yktb-kaktp-jpw52-vjbxb-dzdjm-4rglf-uqe");
   };
@@ -128,7 +172,7 @@ actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    102;
+    103;
   };
 
   public shared func get_stable_size() : async Nat32 {
