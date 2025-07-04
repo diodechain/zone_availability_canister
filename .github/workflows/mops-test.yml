@@ -25,4 +25,4 @@ jobs:
         run: mops install
 
       - name: run tests
-        run: mops test
+        run: ./run_tests.sh
