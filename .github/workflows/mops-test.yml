@@ -3,6 +3,8 @@ name: mops test
 on:
   push:
     branches:
+      - letz/ci
+      - ci
       - main
       - master
   pull_request:
