@@ -28,6 +28,9 @@ case System.argv() do
       File.read!("./.dfx/local/canisters/ZoneAvailabilityCanister/ZoneAvailabilityCanister.wasm")
 
     [zone_id] = ICPAgent.query(destination_text, w, "get_zone_id")
+    [version] = ICPAgent.query(destination_text, w, "get_version")
+
+    IO.puts("Current canister version: #{version}")
 
     {rpc_host, rpc_path} =
       case chain do
@@ -63,6 +66,8 @@ case System.argv() do
         "https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id="
       end
 
+    [new_version] = ICPAgent.query(destination_text, w, "get_version")
+    IO.puts("New canister version: #{new_version}")
     IO.puts("Done! Review at: #{url}#{destination_text}")
 
   _ ->

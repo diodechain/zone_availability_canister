@@ -18,7 +18,7 @@ module DiodeAttachments {
         - n times write_attachment_chunk()
         - finalize_attachment()
 
-    After the attachment is finalized, it can be read using read_attachment() and read_attachment_chunk().
+    After the attachment is finalized, it can be read using get_attachment() and read_attachment_chunk().
     Small attachments are finalized immediately after calling write_attachment()
     */
 

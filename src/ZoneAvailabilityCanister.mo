@@ -199,9 +199,8 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     DiodeAttachments.delete_attachment(attachments, identity_hash);
   };
 
-  public shared (msg) func get_attachment(identity_hash : Blob) : async Result.Result<Blob, Text> {
+  public query (msg) func get_attachment(identity_hash : Blob) : async Result.Result<Blob, Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     switch (DiodeAttachments.get_attachment(attachments, identity_hash)) {
       case (#err(e)) {
         #err(e);
@@ -212,9 +211,8 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     };
   };
 
-  public shared (msg) func get_attachment_metadata(identity_hash : Blob) : async Result.Result<DiodeAttachments.AttachmentMetadata, Text> {
+  public query (msg) func get_attachment_metadata(identity_hash : Blob) : async Result.Result<DiodeAttachments.AttachmentMetadata, Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeAttachments.get_attachment_metadata(attachments, identity_hash);
   };
 
@@ -236,9 +234,8 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     DiodeAttachments.finalize_attachment(attachments, identity_hash);
   };
 
-  public shared (msg) func read_attachment_chunk(identity_hash : Blob, offset : Nat64, size : Nat) : async Result.Result<Blob, Text> {
+  public query (msg) func read_attachment_chunk(identity_hash : Blob, offset : Nat64, size : Nat) : async Result.Result<Blob, Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeAttachments.read_attachment_chunk(attachments, identity_hash, offset, size);
   };
 
@@ -285,7 +282,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    301;
+    302;
   };
 
   public query func get_stable_storage_size() : async Nat {
