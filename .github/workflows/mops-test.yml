@@ -15,6 +15,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: dfinity/setup-dfx@main
       - uses: ZenVoich/setup-mops@v1
 
       - name: make sure moc is installed
