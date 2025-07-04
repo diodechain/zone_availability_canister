@@ -39,8 +39,8 @@ case System.argv() do
     end
 
     IO.puts("Chain: #{chain}")
-    #[version] = ICPAgent.query(destination_text, w, "get_version")
-    #IO.puts("Current canister version: #{version}")
+    [version] = ICPAgent.query(destination_text, w, "get_version")
+    IO.puts("Current canister version: #{version}")
 
     {rpc_host, rpc_path} =
       case chain do
