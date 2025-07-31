@@ -154,7 +154,7 @@ module DiodeFileSystem {
     // Wrap if needed
     if (fs.end_offset + total_size > fs.max_storage) {
       fs.end_offset := 0;
-    }
+    };
     // Write file content
     let content_offset = fs.end_offset;
     WriteableBand.writeBlob(fs.files, content_offset, ciphertext);
@@ -202,7 +202,7 @@ module DiodeFileSystem {
 
   private func ensureRingBufferSpace(fs : FileSystem, total_size : Nat64) {
     while (true) {
-      let next_offset_val = switch (fs.next_entry_offset) { case null { 0 }; case (?v) { v } };
+      let next_offset_val = switch (fs.next_entry_offset) { case null { 0 : Nat64 }; case (?v) { v } };
       let used = if (fs.end_offset >= next_offset_val) {
         fs.end_offset - next_offset_val
       } else {
@@ -211,7 +211,7 @@ module DiodeFileSystem {
       if (fs.max_storage - used >= total_size) return;
       if (fs.next_entry_offset == null) return;
       remove_next_file_entry(fs);
-      let next_offset_val2 = switch (fs.next_entry_offset) { case null { 0 }; case (?v) { v } };
+      let next_offset_val2 = switch (fs.next_entry_offset) { case null { 0 : Nat64 }; case (?v) { v } };
       let used2 = if (fs.end_offset >= next_offset_val2) {
         fs.end_offset - next_offset_val2
       } else {
