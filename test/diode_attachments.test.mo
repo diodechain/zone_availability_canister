@@ -9,7 +9,7 @@ import { test; suite } "mo:test/async";
 import { DiodeAttachments } "../src/";
 import Result "mo:base/Result";
 
-actor {
+persistent actor {
   public func runTests() : async () {
     await suite(
       "DiodeAttachments Tests",

@@ -6,7 +6,7 @@ import Nat8 "mo:base/Nat8";
 import { test; suite } "mo:test/async";
 import { MetaData } "../src/";
 
-actor {
+persistent actor {
   public func runTests() : async () {
     var md = MetaData.new();
     MetaData.set_public_and_protected_key(md, make_key(1), make_key(2));
