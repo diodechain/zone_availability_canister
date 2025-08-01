@@ -506,16 +506,9 @@ module DiodeFileSystem {
     switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
       case (null) { [] };
       case (?directory) {
-        if (directory.child_files.size() == 0) {
-          return [];
-        };
-        let files = Array.init<File>(directory.child_files.size(), get_file_by_id(fs, directory.child_files[0]));
-        var index = 0;
-        for (file_id in directory.child_files.vals()) {
-          files[index] := get_file_by_id(fs, file_id);
-          index += 1;
-        };
-        Array.freeze(files);
+        Array.map<Nat32, File>(directory.child_files, func(file_id : Nat32) : File {
+          get_file_by_id(fs, file_id)
+        });
       };
     };
   };
