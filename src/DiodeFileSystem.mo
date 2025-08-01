@@ -196,13 +196,13 @@ module DiodeFileSystem {
       case (#ok(file_id)) {
         switch (write_file_chunk(fs, content_hash, 0, ciphertext)) {
           case (#err(err)) {
-            delete_file(fs, content_hash);
+            let _ = delete_file(fs, content_hash);
             return #err(err);
           };
           case (#ok()) {
             switch (finalize_file(fs, content_hash)) {
               case (#err(err)) {
-                delete_file(fs, content_hash);
+                let _ = delete_file(fs, content_hash);
                 return #err(err);
               };
               case (#ok()) {
@@ -215,8 +215,55 @@ module DiodeFileSystem {
     };
   };
 
-  public func delete_file(fs : FileSystem, content_hash : Blob) {
-    Map.delete<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash);
+  public func delete_file(fs : FileSystem, content_hash : Blob) : Result.Result<(), Text> {
+    switch (Map.get<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash)) {
+      case (null) {
+        return #err("file not found");
+      };
+      case (?file_id) {
+        let entry_offset = get_file_entry_offset(fs, file_id);
+        let directory_id = WriteableBand.readBlob(fs.files, entry_offset + 8, 32);
+        let size = WriteableBand.readNat64(fs.files, entry_offset + 104);
+        let finalized = WriteableBand.readNat32(fs.files, entry_offset + 112) == 1;
+        
+        // Remove from file index maps
+        Map.delete<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash);
+        Map.delete<Nat32, Nat64>(fs.file_id_to_offset, Map.n32hash, file_id);
+        
+        // Remove from directory's child_files list if finalized
+        if (finalized) {
+          switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
+            case (null) {
+              return #err("directory not found during delete");
+            };
+            case (?dir) {
+              let updated_directory : Directory = {
+                id = dir.id;
+                name_hash = dir.name_hash;
+                parent_id = dir.parent_id;
+                timestamp = dir.timestamp;
+                child_directories = dir.child_directories;
+                child_files = Array.filter<Nat32>(dir.child_files, func (f : Nat32) : Bool { f != file_id });
+              };
+              Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
+            };
+          };
+        };
+        
+        // Mark entry as deleted by setting timestamp to 0
+        WriteableBand.writeNat32(fs.files, entry_offset + 4, 0);
+        
+        // Update storage counters
+        let total_size = size + file_entry_size;
+        if (fs.current_storage >= total_size) {
+          fs.current_storage -= total_size;
+        } else {
+          fs.current_storage := 0;
+        };
+        
+        return #ok();
+      };
+    };
   };
 
   public func allocate_file(fs : FileSystem, directory_id : Blob, name_hash : Blob, content_hash : Blob, size : Nat64) : Result.Result<Nat32, Text> {

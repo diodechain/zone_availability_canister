@@ -644,6 +644,115 @@ persistent actor {
             assert files_after_third[0].finalized == true;
           },
         );
+
+        await test(
+          "Should handle delete_file correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name_hash = make_blob(32, 2);
+            let content_hash = make_blob(32, 3);
+            let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
+
+            // Create directory
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+
+            // Add file normally
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+
+            // Verify file exists
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(file)) {
+                assert file.id == 1;
+                assert file.finalized == true;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Verify directory contains the file
+            let files_before = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files_before.size() == 1;
+
+            // Get initial storage usage
+            let storage_before = DiodeFileSystem.get_usage(fs);
+            assert storage_before > 0;
+
+            // Delete the file
+            switch (DiodeFileSystem.delete_file(fs, content_hash)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // Verify file no longer exists
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(_)) { assert false; };
+              case (#err(err)) { assert err == "file not found"; };
+            };
+
+            // Verify directory no longer contains the file
+            let files_after = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files_after.size() == 0;
+
+            // Verify storage usage decreased
+            let storage_after = DiodeFileSystem.get_usage(fs);
+            assert storage_after < storage_before;
+
+            // Try to delete non-existent file
+            switch (DiodeFileSystem.delete_file(fs, content_hash)) {
+              case (#ok()) { assert false; };
+              case (#err(err)) { assert err == "file not found"; };
+            };
+          },
+        );
+
+        await test(
+          "Should handle delete_file for unfinalized file correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name_hash = make_blob(32, 2);
+            let content_hash = make_blob(32, 3);
+
+            // Create directory
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+
+            // Allocate file but don't finalize
+            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5)) {
+              case (#ok(file_id)) {
+                assert file_id == 1;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Verify file exists but not finalized
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(file)) {
+                assert file.finalized == false;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Directory should not contain the file (not finalized)
+            let files_before = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files_before.size() == 0;
+
+            // Delete the unfinalized file
+            switch (DiodeFileSystem.delete_file(fs, content_hash)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // Verify file no longer exists
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(_)) { assert false; };
+              case (#err(err)) { assert err == "file not found"; };
+            };
+
+            // Directory should still be empty
+            let files_after = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files_after.size() == 0;
+          },
+        );
       },
     );
   };
