@@ -129,6 +129,7 @@ actor {
                 assert file.content_hash == content_hash;
                 assert file.ciphertext == ciphertext;
                 assert file.size == 5;
+                assert file.finalized == true;
               };
               case (#err(_)) { assert false; };
             };
@@ -164,6 +165,7 @@ actor {
               case (#ok(file1)) {
                 assert file1.id == 1;
                 assert file1.size == 3;
+                assert file1.finalized == true;
               };
               case (#err(_)) { assert false; };
             };
@@ -172,6 +174,7 @@ actor {
               case (#ok(file2)) {
                 assert file2.id == 2;
                 assert file2.size == 4;
+                assert file2.finalized == true;
               };
               case (#err(_)) { assert false; };
             };
@@ -342,6 +345,7 @@ actor {
             assert file.id == 1;
             assert file.content_hash == content_hash;
             assert file.ciphertext == ciphertext;
+            assert file.finalized == true;
           },
         );
 
@@ -402,6 +406,184 @@ actor {
             assert DiodeFileSystem.get_max_usage(fs) == 2000;
           },
         );
+
+        await test(
+          "Should handle chunked file upload correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name_hash = make_blob(32, 2);
+            let content_hash = make_blob(32, 3);
+            let ciphertext = Blob.fromArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+            // Create directory
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+
+            // Allocate file
+            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 10)) {
+              case (#ok(file_id)) {
+                assert file_id == 1;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Write chunks
+            let chunk1 = Blob.fromArray([1, 2, 3, 4, 5]);
+            let chunk2 = Blob.fromArray([6, 7, 8, 9, 10]);
+            
+            switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 0, chunk1)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+            switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 5, chunk2)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // File should not be finalized yet
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(file)) {
+                assert file.finalized == false;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Finalize file
+            switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // File should be finalized now
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(file)) {
+                assert file.finalized == true;
+                assert file.ciphertext == ciphertext;
+                assert file.size == 10;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Check directory contains the file
+            let files = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files.size() == 1;
+            assert files[0].id == 1;
+          },
+        );
+
+        await test(
+          "Should handle chunked file download correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name_hash = make_blob(32, 2);
+            let content_hash = make_blob(32, 3);
+            let ciphertext = Blob.fromArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+            // Create directory and add file normally
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+
+            // Read chunks
+            switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
+              case (#ok(chunk1)) {
+                assert chunk1 == Blob.fromArray([1, 2, 3, 4, 5]);
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 5, 5)) {
+              case (#ok(chunk2)) {
+                assert chunk2 == Blob.fromArray([6, 7, 8, 9, 10]);
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Test out of bounds
+            switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 8, 5)) {
+              case (#ok(_)) { assert false; };
+              case (#err(err)) { assert err == "chunk out of bounds"; };
+            };
+          },
+        );
+
+        await test(
+          "Should handle chunked upload error cases correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name_hash = make_blob(32, 2);
+            let content_hash = make_blob(32, 3);
+
+            // Create directory
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+
+            // Try to write chunk to non-existent file
+            let chunk = Blob.fromArray([1, 2, 3]);
+            switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 0, chunk)) {
+              case (#ok(_)) { assert false; };
+              case (#err(err)) { assert err == "file not found"; };
+            };
+
+            // Allocate file
+            assert isOkNat32(DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5));
+
+            // Try to write out of bounds chunk
+            switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 3, chunk)) {
+              case (#ok(_)) { assert false; };
+              case (#err(err)) { assert err == "chunk out of bounds"; };
+            };
+
+            // Finalize file
+            switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // Try to write to finalized file
+            switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 0, chunk)) {
+              case (#ok(_)) { assert false; };
+              case (#err(err)) { assert err == "file is already finalized"; };
+            };
+          },
+        );
+
+        await test(
+          "Should use write_file for small files correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name_hash = make_blob(32, 2);
+            let content_hash = make_blob(32, 3);
+            let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
+
+            // Create directory
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+
+            // Use write_file (should allocate, write chunk, and finalize in one call)
+            switch (DiodeFileSystem.write_file(fs, directory_id, name_hash, content_hash, ciphertext)) {
+              case (#ok(file_id)) {
+                assert file_id == 1;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // File should be finalized
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(file)) {
+                assert file.finalized == true;
+                assert file.ciphertext == ciphertext;
+                assert file.size == 5;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Check directory contains the file
+            let files = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files.size() == 1;
+            assert files[0].id == 1;
+          },
+        );
       },
     );
   };
@@ -417,6 +599,8 @@ actor {
       };
     };
   };
+
+
 
   private func isOkNat32(result : Result.Result<Nat32, Text>) : Bool {
     switch (result) {
