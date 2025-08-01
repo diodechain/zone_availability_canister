@@ -8,7 +8,7 @@ import { test; suite } "mo:test/async";
 import { DiodeMessages } "../src/";
 import Result "mo:base/Result";
 
-actor {
+persistent actor {
   public func runTests() : async () {
     var dm = DiodeMessages.new();
 

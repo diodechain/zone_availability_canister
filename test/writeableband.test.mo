@@ -2,7 +2,7 @@ import Blob "mo:base/Blob";
 import { test; suite } "mo:test/async";
 import { WriteableBand } "../src/";
 
-actor {
+persistent actor {
   public func runTests() : async () {
     await suite(
       "Add Blob",

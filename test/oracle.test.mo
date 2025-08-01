@@ -3,7 +3,7 @@ import Debug "mo:base/Debug";
 import Oracle "../src/Oracle";
 import Types "../src/Types";
 
-actor {
+persistent actor {
   public shared query func oracle_transform_function(args : Types.TransformArgs) : async Types.HttpResponsePayload {
     Oracle.transform_function(args);
   };
