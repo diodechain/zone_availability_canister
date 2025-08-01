@@ -311,10 +311,16 @@ module DiodeFileSystem {
         let entry_offset = get_file_entry_offset(fs, file_id);
         let directory_id = WriteableBand.readBlob(fs.files, entry_offset + 8, 32);
         
+        // Check if already finalized
+        let already_finalized = WriteableBand.readNat32(fs.files, entry_offset + 112) == 1;
+        if (already_finalized) {
+          return #ok(); // Already finalized, nothing to do
+        };
+        
         // Mark as finalized
         WriteableBand.writeNat32(fs.files, entry_offset + 112, 1);
         
-        // Update directory's child_files
+        // Update directory's child_files only if not already finalized
         let directory = Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id);
         switch (directory) {
           case (null) { return #err("directory not found during finalize"); };

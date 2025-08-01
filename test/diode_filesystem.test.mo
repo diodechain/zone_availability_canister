@@ -584,6 +584,66 @@ persistent actor {
             assert files[0].id == 1;
           },
         );
+
+        await test(
+          "Should handle finalize_file idempotently",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name_hash = make_blob(32, 2);
+            let content_hash = make_blob(32, 3);
+            let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
+
+            // Create directory
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+
+            // Allocate file
+            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5)) {
+              case (#ok(file_id)) {
+                assert file_id == 1;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Write chunk
+            switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 0, ciphertext)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // Finalize file first time
+            switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // Check directory has one file
+            let files_after_first = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files_after_first.size() == 1;
+
+            // Finalize file second time (should be idempotent)
+            switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // Check directory still has only one file (no duplicates)
+            let files_after_second = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files_after_second.size() == 1;
+
+            // Finalize file third time (should still be idempotent)
+            switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false; };
+            };
+
+            // Check directory still has only one file
+            let files_after_third = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files_after_third.size() == 1;
+            assert files_after_third[0].id == 1;
+            assert files_after_third[0].finalized == true;
+          },
+        );
       },
     );
   };
