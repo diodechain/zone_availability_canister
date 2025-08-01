@@ -86,19 +86,9 @@ fi
 print_status "Installing project dependencies with mops..."
 mops install
 
-# 6. Add MOC compiler to PATH
-print_status "Setting up Motoko compiler path..."
-MOC_PATH="$HOME/.cache/mops/moc/0.14.11"
-if [ -f "$MOC_PATH/moc" ]; then
-    # Add to bashrc if not already there
-    if ! grep -q "mops/moc" ~/.bashrc; then
-        echo "export PATH=\"\$HOME/.cache/mops/moc/0.14.11:\$PATH\"" >> ~/.bashrc
-    fi
-    export PATH="$MOC_PATH:$PATH"
-    print_status "MOC compiler found at: $MOC_PATH"
-else
-    print_warning "MOC compiler not found at expected path"
-fi
+# 6. Install DFX
+print_status "Installing DFX..."
+DFXVM_INIT_YES=true DFX_VERSION=0.25.1 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 
 # 7. Verify installations
 print_status "Verifying installations..."
@@ -113,19 +103,9 @@ print_status "You may need to restart your shell or run: source ~/.bashrc"
 # Add environment setup to current session
 echo ""
 print_status "Setting up environment for current session..."
-export PATH="$HOME/.asdf/bin:$HOME/.cache/mops/moc/0.14.11:$PATH"
+export PATH="$HOME/.asdf/bin:$HOME/.local/share/dfx/bin:$PATH"
 if [ -f ~/.asdf/asdf.sh ]; then
     . ~/.asdf/asdf.sh
 fi
 
 print_status "🎉 Setup complete!"
-print_status ""
-print_status "To test your installation:"
-print_status "  1. Test compilation: moc --package map ~/.cache/mops/packages/map@9.0.1/src --package base ~/.cache/mops/packages/base@0.14.13/src src/DiodeFileSystem.mo"
-print_status "  2. Note: Full mops test requires DFX, but compilation works!"
-print_status ""
-print_status "Your changes to DiodeFileSystem.mo have been successfully implemented:"
-print_status "  ✅ Removed iterator system (FileEntry type and related code)"
-print_status "  ✅ Added chunked upload/download functionality"
-print_status "  ✅ Added finalized field to File type"
-print_status "  ✅ Updated tests with chunked operation examples"
