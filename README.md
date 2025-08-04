@@ -44,13 +44,14 @@ This project requires an installation of:
 
 - nodejs >= 22.9
 - mops https://cli.mops.one/
-- DFX version 0.24.0 or newer
+- DFX version 0.25.1
 - The [Internet Computer SDK](https://internetcomputer.org/docs/current/developer-docs/setup/install/).
 
 ### Run the tests
 
 ```shell
 $ cd diode_messages
+$ . ./install_deps.sh
 $ mops test
 ```
 

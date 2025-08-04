@@ -15,14 +15,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: dfinity/setup-dfx@main
-      - uses: ZenVoich/setup-mops@v1
-
-      - name: make sure moc is installed
-        run: mops toolchain bin moc || mops toolchain use moc latest
-
-      - name: install deps
-        run: mops install
-
-      - name: run tests
-        run: ./run_tests.sh
+      - name: install deps and run tests
+        run: |
+          . ./install_deps.sh
+          ./run_tests.sh
