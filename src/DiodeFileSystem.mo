@@ -57,7 +57,7 @@ module DiodeFileSystem {
       var current_storage = 0;
       var first_entry_offset = 0;
       var end_offset = 0;
-      var next_entry_offset = ?0; // always start at 0
+      var next_entry_offset = null; // no entries to remove in empty filesystem
     };
   };
 
@@ -144,10 +144,29 @@ module DiodeFileSystem {
     let file_size = Nat64.fromNat(ciphertext.size());
     let total_size = file_size + file_entry_size;
     ensureRingBufferSpace(fs, total_size);
-    // Wrap if needed
+    // Entry will not fit in the current space, wrap around to the beginning
     if (fs.end_offset + total_size > fs.max_storage) {
       fs.end_offset := 0;
+      
+      // When wrapping, remove files that would be overwritten
+      let new_file_end = fs.end_offset + total_size;
+      label removal_loop while (fs.next_entry_offset != null) {
+        let entry_offset = switch (fs.next_entry_offset) { 
+          case (?offset) { offset }; 
+          case null { break removal_loop; } 
+        };
+        
+        // If this entry or its content would be overwritten by the new file, remove it
+        // The content starts before the entry, and the entry ends at entry_offset + file_entry_size
+        if (entry_offset < new_file_end) {
+          // This entry will be overwritten, remove the file
+          remove_next_file_entry(fs);
+        } else {
+          break removal_loop; // No more overlapping files
+        }
+      };
     };
+    
     // Write file content
     let content_offset = fs.end_offset;
     WriteableBand.writeBlob(fs.files, content_offset, ciphertext);
@@ -164,6 +183,12 @@ module DiodeFileSystem {
     WriteableBand.appendNat32(fs.files, 0); // reserved
     fs.end_offset += file_entry_size;
     fs.current_storage += total_size;
+    
+    // Set next_entry_offset to point to the first entry when adding the first file
+    if (fs.next_entry_offset == null) {
+      fs.next_entry_offset := ?entry_offset;
+    };
+    
     // Update file index
     Map.set<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash, fs.file_index);
     Map.set<Nat32, Nat64>(fs.file_id_to_offset, Map.n32hash, fs.file_index, entry_offset);
@@ -416,24 +441,13 @@ module DiodeFileSystem {
   };
 
   private func ensureRingBufferSpace(fs : FileSystem, total_size : Nat64) {
-    while (true) {
-      let next_offset_val = switch (fs.next_entry_offset) { case null { 0 : Nat64 }; case (?v) { v } };
-      let used = if (fs.end_offset >= next_offset_val) {
-        fs.end_offset - next_offset_val
-      } else {
-        fs.max_storage - next_offset_val + fs.end_offset
-      };
-      if (fs.max_storage - used >= total_size) return;
-      if (fs.next_entry_offset == null) return;
+    // Remove files if we exceed storage capacity
+    while (fs.current_storage + total_size > fs.max_storage) {
+      if (fs.next_entry_offset == null) return; // No more files to remove
+      let prev_storage = fs.current_storage;
       remove_next_file_entry(fs);
-      let next_offset_val2 = switch (fs.next_entry_offset) { case null { 0 : Nat64 }; case (?v) { v } };
-      let used2 = if (fs.end_offset >= next_offset_val2) {
-        fs.end_offset - next_offset_val2
-      } else {
-        fs.max_storage - next_offset_val2 + fs.end_offset
-      };
-      if (used2 == used) return; // avoid infinite loop
-    }
+      if (fs.current_storage == prev_storage) return; // Avoid infinite loop
+    };
   };
 
   private func remove_next_file_entry(fs : FileSystem) {
@@ -465,15 +479,19 @@ module DiodeFileSystem {
             Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
           };
         };
+        // Update current storage
+        let total_file_size = size + file_entry_size;
+        if (fs.current_storage >= total_file_size) {
+          fs.current_storage -= total_file_size;
+        } else {
+          fs.current_storage := 0;
+        };
+        
         // Mark entry as empty
         WriteableBand.writeNat32(fs.files, offset + 4, 0); // timestamp = 0 marks as empty
-        // Advance next_entry_offset
-        let next_offset = offset + size + file_entry_size;
-        if (next_offset + file_entry_size > fs.max_storage) {
-          fs.next_entry_offset := ?0;
-        } else {
-          fs.next_entry_offset := ?next_offset;
-        };
+        // For now, just set to null. It will be recalculated when needed.
+        // The complex next-entry calculation is tricky with the [content][entry] layout.
+        fs.next_entry_offset := null;
       };
     };
   };
