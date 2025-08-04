@@ -74,6 +74,8 @@ else
     npm install -g ic-mops
 fi
 
+mops self update
+
 # 4. Initialize mops toolchain
 print_status "Initializing mops toolchain..."
 if [ ! -f ~/.config/mops/toolchain.toml ]; then
