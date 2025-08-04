@@ -87,21 +87,21 @@ persistent actor {
 
             // Test invalid directory_id size
             switch (DiodeFileSystem.create_directory(fs, invalid_id, valid_name, null)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "directory_id must be 32 bytes"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "directory_id must be 32 bytes" };
             };
 
             // Test invalid name_hash size
             switch (DiodeFileSystem.create_directory(fs, valid_id, invalid_name, null)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "name_hash must be 32 bytes"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "name_hash must be 32 bytes" };
             };
 
             // Test creating same directory twice
             assert isOk(DiodeFileSystem.create_directory(fs, valid_id, valid_name, null));
             switch (DiodeFileSystem.create_directory(fs, valid_id, valid_name, null)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "directory already exists"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "directory already exists" };
             };
           },
         );
@@ -131,7 +131,7 @@ persistent actor {
                 assert file.size == 5;
                 assert file.finalized == true;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             let files = DiodeFileSystem.get_files_in_directory(fs, directory_id);
@@ -167,7 +167,7 @@ persistent actor {
                 assert file1.size == 3;
                 assert file1.finalized == true;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash2)) {
@@ -176,7 +176,7 @@ persistent actor {
                 assert file2.size == 4;
                 assert file2.finalized == true;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             let files = DiodeFileSystem.get_files_in_directory(fs, directory_id);
@@ -199,27 +199,27 @@ persistent actor {
 
             // Test invalid directory_id size
             switch (DiodeFileSystem.add_file(fs, invalid_id, valid_hash, valid_hash, valid_ciphertext)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "directory_id must be 32 bytes"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "directory_id must be 32 bytes" };
             };
 
             // Test invalid name_hash size
             switch (DiodeFileSystem.add_file(fs, valid_id, invalid_hash, valid_hash, valid_ciphertext)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "name_hash must be 32 bytes"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "name_hash must be 32 bytes" };
             };
 
             // Test invalid content_hash size
             switch (DiodeFileSystem.add_file(fs, valid_id, valid_hash, invalid_hash, valid_ciphertext)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "content_hash must be 32 bytes"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "content_hash must be 32 bytes" };
             };
 
             // Test adding to non-existent directory
             let non_existent_id = make_blob(32, 999);
             switch (DiodeFileSystem.add_file(fs, non_existent_id, valid_hash, valid_hash, valid_ciphertext)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "directory not found"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "directory not found" };
             };
           },
         );
@@ -253,7 +253,7 @@ persistent actor {
                 assert file1.content_hash == content_hash1;
                 assert file1.size == 50;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Add second file (170 bytes, total 340 bytes - should fit)
@@ -264,14 +264,14 @@ persistent actor {
               case (#ok(file1)) {
                 assert file1.content_hash == content_hash1;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash2)) {
               case (#ok(file2)) {
                 assert file2.content_hash == content_hash2;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Add third file (170 bytes, total would be 510 bytes > 350 bytes limit)
@@ -280,8 +280,8 @@ persistent actor {
 
             // First file should be removed (oldest file removed first)
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
-              case (#ok(_)) { assert false; }; // Should not exist
-              case (#err(err)) { assert err == "file not found"; };
+              case (#ok(_)) { assert false }; // Should not exist
+              case (#err(err)) { assert err == "file not found" };
             };
 
             // Second and third files should still exist
@@ -289,14 +289,14 @@ persistent actor {
               case (#ok(file2)) {
                 assert file2.content_hash == content_hash2;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash3)) {
               case (#ok(file3)) {
                 assert file3.content_hash == content_hash3;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
           },
         );
@@ -326,7 +326,7 @@ persistent actor {
               case (#ok(file1)) {
                 assert file1.content_hash == content_hash1;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Add second file - won't fit at position 170, should trigger wrapping
@@ -335,8 +335,8 @@ persistent actor {
 
             // First file should be removed due to wrapping collision
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
-              case (#ok(_)) { assert false; }; // Should not exist
-              case (#err(err)) { assert err == "file not found"; };
+              case (#ok(_)) { assert false }; // Should not exist
+              case (#err(err)) { assert err == "file not found" };
             };
 
             // Second file should exist
@@ -344,7 +344,7 @@ persistent actor {
               case (#ok(file2)) {
                 assert file2.content_hash == content_hash2;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
           },
         );
@@ -375,7 +375,7 @@ persistent actor {
               case (#ok(id1), #ok(id2)) {
                 assert id1 == id2;
               };
-              case (_, _) { assert false; };
+              case (_, _) { assert false };
             };
 
             // Should only have one file in the system
@@ -482,20 +482,20 @@ persistent actor {
               case (#ok(file_id)) {
                 assert file_id == 1;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Write chunks
             let chunk1 = Blob.fromArray([1, 2, 3, 4, 5]);
             let chunk2 = Blob.fromArray([6, 7, 8, 9, 10]);
-            
+
             switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 0, chunk1)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
             switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 5, chunk2)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // File should not be finalized yet
@@ -503,13 +503,13 @@ persistent actor {
               case (#ok(file)) {
                 assert file.finalized == false;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Finalize file
             switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // File should be finalized now
@@ -519,7 +519,7 @@ persistent actor {
                 assert file.ciphertext == ciphertext;
                 assert file.size == 10;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Check directory contains the file
@@ -547,20 +547,20 @@ persistent actor {
               case (#ok(chunk1)) {
                 assert chunk1 == Blob.fromArray([1, 2, 3, 4, 5]);
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 5, 5)) {
               case (#ok(chunk2)) {
                 assert chunk2 == Blob.fromArray([6, 7, 8, 9, 10]);
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Test out of bounds
             switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 8, 5)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "chunk out of bounds"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "chunk out of bounds" };
             };
           },
         );
@@ -579,8 +579,8 @@ persistent actor {
             // Try to write chunk to non-existent file
             let chunk = Blob.fromArray([1, 2, 3]);
             switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 0, chunk)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "file not found"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "file not found" };
             };
 
             // Allocate file
@@ -588,20 +588,20 @@ persistent actor {
 
             // Try to write out of bounds chunk
             switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 3, chunk)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "chunk out of bounds"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "chunk out of bounds" };
             };
 
             // Finalize file
             switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Try to write to finalized file
             switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 0, chunk)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "file is already finalized"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "file is already finalized" };
             };
           },
         );
@@ -623,7 +623,7 @@ persistent actor {
               case (#ok(file_id)) {
                 assert file_id == 1;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // File should be finalized
@@ -633,7 +633,7 @@ persistent actor {
                 assert file.ciphertext == ciphertext;
                 assert file.size == 5;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Check directory contains the file
@@ -660,19 +660,19 @@ persistent actor {
               case (#ok(file_id)) {
                 assert file_id == 1;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Write chunk
             switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 0, ciphertext)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Finalize file first time
             switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Check directory has one file
@@ -682,7 +682,7 @@ persistent actor {
             // Finalize file second time (should be idempotent)
             switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Check directory still has only one file (no duplicates)
@@ -692,7 +692,7 @@ persistent actor {
             // Finalize file third time (should still be idempotent)
             switch (DiodeFileSystem.finalize_file(fs, content_hash)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Check directory still has only one file
@@ -724,7 +724,7 @@ persistent actor {
                 assert file.id == 1;
                 assert file.finalized == true;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Verify directory contains the file
@@ -738,13 +738,13 @@ persistent actor {
             // Delete the file
             switch (DiodeFileSystem.delete_file(fs, content_hash)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Verify file no longer exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "file not found"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "file not found" };
             };
 
             // Verify directory no longer contains the file
@@ -757,8 +757,8 @@ persistent actor {
 
             // Try to delete non-existent file
             switch (DiodeFileSystem.delete_file(fs, content_hash)) {
-              case (#ok()) { assert false; };
-              case (#err(err)) { assert err == "file not found"; };
+              case (#ok()) { assert false };
+              case (#err(err)) { assert err == "file not found" };
             };
           },
         );
@@ -779,7 +779,7 @@ persistent actor {
               case (#ok(file_id)) {
                 assert file_id == 1;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Verify file exists but not finalized
@@ -787,7 +787,7 @@ persistent actor {
               case (#ok(file)) {
                 assert file.finalized == false;
               };
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Directory should not contain the file (not finalized)
@@ -797,13 +797,13 @@ persistent actor {
             // Delete the unfinalized file
             switch (DiodeFileSystem.delete_file(fs, content_hash)) {
               case (#ok()) {};
-              case (#err(_)) { assert false; };
+              case (#err(_)) { assert false };
             };
 
             // Verify file no longer exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
-              case (#ok(_)) { assert false; };
-              case (#err(err)) { assert err == "file not found"; };
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "file not found" };
             };
 
             // Directory should still be empty
@@ -827,8 +827,6 @@ persistent actor {
     };
   };
 
-
-
   private func isOkNat32(result : Result.Result<Nat32, Text>) : Bool {
     switch (result) {
       case (#ok(n)) {
@@ -845,4 +843,4 @@ persistent actor {
     let a = Array.tabulate<Nat8>(size, func i = Nat8.fromIntWrap(Nat.bitshiftRight(n, 8 * Nat32.fromIntWrap(i))));
     return Blob.fromArray(a);
   };
-}; 
+};

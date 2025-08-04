@@ -51,7 +51,7 @@ actor CanisterFactory {
   };
 
   public shared func cycles_manager_transferCyclesToCanister(
-    canisterId : Principal,
+    canisterId : Principal
   ) : async CyclesManager.TransferCyclesResult {
     if (not isCanister(canisterId)) trap("canisterId principal must be a canister");
 
