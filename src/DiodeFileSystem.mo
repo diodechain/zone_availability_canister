@@ -57,7 +57,7 @@ module DiodeFileSystem {
       var current_storage = 0;
       var first_entry_offset = 0;
       var end_offset = 0;
-      var next_entry_offset = ?0; // always start at 0
+      var next_entry_offset = null; // no entries to remove in empty filesystem
     };
   };
 
@@ -144,9 +144,17 @@ module DiodeFileSystem {
     let file_size = Nat64.fromNat(ciphertext.size());
     let total_size = file_size + file_entry_size;
     ensureRingBufferSpace(fs, total_size);
-    // Wrap if needed
+    // Wrap if needed and safe to do so
     if (fs.end_offset + total_size > fs.max_storage) {
-      fs.end_offset := 0;
+      let next_offset_val = switch (fs.next_entry_offset) { case null { fs.max_storage }; case (?v) { v } };
+      // Only wrap if we won't overwrite existing data
+      if (total_size <= next_offset_val) {
+        fs.end_offset := 0;
+      } else {
+        // Can't wrap safely, need to remove files first
+        // This should have been handled by ensureRingBufferSpace, but let's be safe
+        return #err("insufficient space for file");
+      };
     };
     // Write file content
     let content_offset = fs.end_offset;
@@ -164,6 +172,12 @@ module DiodeFileSystem {
     WriteableBand.appendNat32(fs.files, 0); // reserved
     fs.end_offset += file_entry_size;
     fs.current_storage += total_size;
+    
+    // Set next_entry_offset to point to the first entry when adding the first file
+    if (fs.next_entry_offset == null) {
+      fs.next_entry_offset := ?entry_offset;
+    };
+    
     // Update file index
     Map.set<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash, fs.file_index);
     Map.set<Nat32, Nat64>(fs.file_id_to_offset, Map.n32hash, fs.file_index, entry_offset);
@@ -416,23 +430,36 @@ module DiodeFileSystem {
   };
 
   private func ensureRingBufferSpace(fs : FileSystem, total_size : Nat64) {
-    while (true) {
-      let next_offset_val = switch (fs.next_entry_offset) { case null { 0 : Nat64 }; case (?v) { v } };
-      let used = if (fs.end_offset >= next_offset_val) {
-        fs.end_offset - next_offset_val
-      } else {
-        fs.max_storage - next_offset_val + fs.end_offset
-      };
-      if (fs.max_storage - used >= total_size) return;
-      if (fs.next_entry_offset == null) return;
+    // Simple approach: only remove files if we really need the space
+    // and can't fit even with wrapping
+    
+    // Check if we have enough space without wrapping
+    if (fs.end_offset + total_size <= fs.max_storage) return;
+    
+    // Check if we can wrap around to the beginning
+    if (fs.next_entry_offset == null) {
+      // No files to overwrite, so we can freely wrap if total_size fits
+      if (total_size <= fs.max_storage) return;
+      // File is larger than entire storage, can't fit
+      return;
+    };
+    
+    let next_offset_val = switch (fs.next_entry_offset) { case null { fs.max_storage }; case (?v) { v } };
+    
+    // Can we fit by wrapping around?
+    if (total_size <= next_offset_val) return;
+    
+    // Need to remove files to make room
+    while (fs.next_entry_offset != null) {
+      let prev_next = fs.next_entry_offset;
       remove_next_file_entry(fs);
-      let next_offset_val2 = switch (fs.next_entry_offset) { case null { 0 : Nat64 }; case (?v) { v } };
-      let used2 = if (fs.end_offset >= next_offset_val2) {
-        fs.end_offset - next_offset_val2
-      } else {
-        fs.max_storage - next_offset_val2 + fs.end_offset
-      };
-      if (used2 == used) return; // avoid infinite loop
+      
+      // Avoid infinite loop
+      if (fs.next_entry_offset == prev_next) return;
+      
+      // Check if we now have enough space to wrap
+      let new_next_offset_val = switch (fs.next_entry_offset) { case null { fs.max_storage }; case (?v) { v } };
+      if (total_size <= new_next_offset_val) return;
     }
   };
 
@@ -465,15 +492,19 @@ module DiodeFileSystem {
             Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
           };
         };
+        // Update current storage
+        let total_file_size = size + file_entry_size;
+        if (fs.current_storage >= total_file_size) {
+          fs.current_storage -= total_file_size;
+        } else {
+          fs.current_storage := 0;
+        };
+        
         // Mark entry as empty
         WriteableBand.writeNat32(fs.files, offset + 4, 0); // timestamp = 0 marks as empty
-        // Advance next_entry_offset
-        let next_offset = offset + size + file_entry_size;
-        if (next_offset + file_entry_size > fs.max_storage) {
-          fs.next_entry_offset := ?0;
-        } else {
-          fs.next_entry_offset := ?next_offset;
-        };
+        // For simplicity, just set next_entry_offset to null after removing a file
+        // It will be set again when the next file is added
+        fs.next_entry_offset := null;
       };
     };
   };
