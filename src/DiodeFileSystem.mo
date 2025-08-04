@@ -144,18 +144,29 @@ module DiodeFileSystem {
     let file_size = Nat64.fromNat(ciphertext.size());
     let total_size = file_size + file_entry_size;
     ensureRingBufferSpace(fs, total_size);
-    // Wrap if needed and safe to do so
+    // Entry will not fit in the current space, wrap around to the beginning
     if (fs.end_offset + total_size > fs.max_storage) {
-      let next_offset_val = switch (fs.next_entry_offset) { case null { fs.max_storage }; case (?v) { v } };
-      // Only wrap if we won't overwrite existing data
-      if (total_size <= next_offset_val) {
-        fs.end_offset := 0;
-      } else {
-        // Can't wrap safely, need to remove files first
-        // This should have been handled by ensureRingBufferSpace, but let's be safe
-        return #err("insufficient space for file");
+      fs.end_offset := 0;
+      
+      // When wrapping, remove files that would be overwritten
+      let new_file_end = fs.end_offset + total_size;
+      label removal_loop while (fs.next_entry_offset != null) {
+        let entry_offset = switch (fs.next_entry_offset) { 
+          case (?offset) { offset }; 
+          case null { break removal_loop; } 
+        };
+        
+        // If this entry or its content would be overwritten by the new file, remove it
+        // The content starts before the entry, and the entry ends at entry_offset + file_entry_size
+        if (entry_offset < new_file_end) {
+          // This entry will be overwritten, remove the file
+          remove_next_file_entry(fs);
+        } else {
+          break removal_loop; // No more overlapping files
+        }
       };
     };
+    
     // Write file content
     let content_offset = fs.end_offset;
     WriteableBand.writeBlob(fs.files, content_offset, ciphertext);
@@ -430,37 +441,13 @@ module DiodeFileSystem {
   };
 
   private func ensureRingBufferSpace(fs : FileSystem, total_size : Nat64) {
-    // Simple approach: only remove files if we really need the space
-    // and can't fit even with wrapping
-    
-    // Check if we have enough space without wrapping
-    if (fs.end_offset + total_size <= fs.max_storage) return;
-    
-    // Check if we can wrap around to the beginning
-    if (fs.next_entry_offset == null) {
-      // No files to overwrite, so we can freely wrap if total_size fits
-      if (total_size <= fs.max_storage) return;
-      // File is larger than entire storage, can't fit
-      return;
-    };
-    
-    let next_offset_val = switch (fs.next_entry_offset) { case null { fs.max_storage }; case (?v) { v } };
-    
-    // Can we fit by wrapping around?
-    if (total_size <= next_offset_val) return;
-    
-    // Need to remove files to make room
-    while (fs.next_entry_offset != null) {
-      let prev_next = fs.next_entry_offset;
+    // Remove files if we exceed storage capacity
+    while (fs.current_storage + total_size > fs.max_storage) {
+      if (fs.next_entry_offset == null) return; // No more files to remove
+      let prev_storage = fs.current_storage;
       remove_next_file_entry(fs);
-      
-      // Avoid infinite loop
-      if (fs.next_entry_offset == prev_next) return;
-      
-      // Check if we now have enough space to wrap
-      let new_next_offset_val = switch (fs.next_entry_offset) { case null { fs.max_storage }; case (?v) { v } };
-      if (total_size <= new_next_offset_val) return;
-    }
+      if (fs.current_storage == prev_storage) return; // Avoid infinite loop
+    };
   };
 
   private func remove_next_file_entry(fs : FileSystem) {
@@ -502,8 +489,8 @@ module DiodeFileSystem {
         
         // Mark entry as empty
         WriteableBand.writeNat32(fs.files, offset + 4, 0); // timestamp = 0 marks as empty
-        // For simplicity, just set next_entry_offset to null after removing a file
-        // It will be set again when the next file is added
+        // For now, just set to null. It will be recalculated when needed.
+        // The complex next-entry calculation is tricky with the [content][entry] layout.
         fs.next_entry_offset := null;
       };
     };
