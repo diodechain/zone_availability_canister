@@ -227,23 +227,39 @@ persistent actor {
         await test(
           "Should handle ring-buffer behavior correctly",
           func() : async () {
-            // Create file system with small storage to trigger ring-buffer behavior
-            let fs = DiodeFileSystem.new(200);
+            // Create file system with capacity for exactly 2 files (170 bytes each = 340 bytes total)
+            // Each file: 50 bytes content + 120 bytes metadata = 170 bytes
+            let fs = DiodeFileSystem.new(350); // Slightly larger than 2 files to test edge cases
             let directory_id = make_blob(32, 1);
             let name_hash1 = make_blob(32, 2);
             let name_hash2 = make_blob(32, 3);
-            let content_hash1 = make_blob(32, 4);
-            let content_hash2 = make_blob(32, 5);
+            let name_hash3 = make_blob(32, 4);
+            let content_hash1 = make_blob(32, 5);
+            let content_hash2 = make_blob(32, 6);
+            let content_hash3 = make_blob(32, 7);
             let ciphertext1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i)));
             let ciphertext2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 50)));
+            let ciphertext3 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 100)));
 
             // Create directory
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
 
-            // Add first file
+            // Add first file (170 bytes)
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
 
             // Verify first file exists
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
+              case (#ok(file1)) {
+                assert file1.content_hash == content_hash1;
+                assert file1.size == 50;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Add second file (170 bytes, total 340 bytes - should fit)
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
+
+            // Both files should exist
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
               case (#ok(file1)) {
                 assert file1.content_hash == content_hash1;
@@ -251,26 +267,20 @@ persistent actor {
               case (#err(_)) { assert false; };
             };
 
-            // Add second file (should trigger ring-buffer wrap)
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
-
-            // First file should still exist (not overwritten yet)
-            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
-              case (#ok(file1_after)) {
-                assert file1_after.content_hash == content_hash1;
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash2)) {
+              case (#ok(file2)) {
+                assert file2.content_hash == content_hash2;
               };
               case (#err(_)) { assert false; };
             };
 
-            // Add third file (should overwrite first)
-            let name_hash3 = make_blob(32, 6);
-            let content_hash3 = make_blob(32, 7);
-            let ciphertext3 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 100)));
+            // Add third file (170 bytes, total would be 510 bytes > 350 bytes limit)
+            // Should remove first file to make space
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash3, content_hash3, ciphertext3));
 
-            // First file should be overwritten
+            // First file should be removed (oldest file removed first)
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
-              case (#ok(_)) { assert false; };
+              case (#ok(_)) { assert false; }; // Should not exist
               case (#err(err)) { assert err == "file not found"; };
             };
 
@@ -285,6 +295,54 @@ persistent actor {
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash3)) {
               case (#ok(file3)) {
                 assert file3.content_hash == content_hash3;
+              };
+              case (#err(_)) { assert false; };
+            };
+          },
+        );
+
+        await test(
+          "Should handle ring-buffer wrapping behavior",
+          func() : async () {
+            // Test wrapping when files don't fit at current position
+            // Create filesystem that can fit 1 file normally, but needs wrapping for a second
+            let fs = DiodeFileSystem.new(250); // Between 1 file (170) and 2 files (340)
+            let directory_id = make_blob(32, 1);
+            let name_hash1 = make_blob(32, 2);
+            let name_hash2 = make_blob(32, 3);
+            let content_hash1 = make_blob(32, 4);
+            let content_hash2 = make_blob(32, 5);
+            let ciphertext1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i)));
+            let ciphertext2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 50)));
+
+            // Create directory
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+
+            // Add first file at position 0
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
+
+            // Verify first file exists
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
+              case (#ok(file1)) {
+                assert file1.content_hash == content_hash1;
+              };
+              case (#err(_)) { assert false; };
+            };
+
+            // Add second file - won't fit at position 170, should trigger wrapping
+            // But wrapping would overwrite first file, so first file should be removed
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
+
+            // First file should be removed due to wrapping collision
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
+              case (#ok(_)) { assert false; }; // Should not exist
+              case (#err(err)) { assert err == "file not found"; };
+            };
+
+            // Second file should exist
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash2)) {
+              case (#ok(file2)) {
+                assert file2.content_hash == content_hash2;
               };
               case (#err(_)) { assert false; };
             };
