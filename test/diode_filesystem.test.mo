@@ -1,6 +1,7 @@
 import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
+import Map "mo:map/Map";
 import Nat "mo:base/Nat";
 import Nat32 "mo:base/Nat32";
 import Nat64 "mo:base/Nat64";
@@ -41,7 +42,7 @@ persistent actor {
             assert directory.name_ciphertext == name_hash;
             assert directory.parent_id == null;
             assert directory.child_directories.size() == 0;
-            assert directory.child_files.size() == 0;
+            assert Map.size(directory.child_files) == 0;
           },
         );
 
