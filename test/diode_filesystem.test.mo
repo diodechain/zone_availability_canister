@@ -32,19 +32,16 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
 
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             let ?directory = DiodeFileSystem.get_directory(fs, directory_id);
             assert directory.id == directory_id;
-            assert directory.name_hash == name_hash;
+            assert directory.name_ciphertext == name_ciphertext;
             assert directory.parent_id == null;
             assert directory.child_directories.size() == 0;
             assert directory.child_files.size() == 0;
-
-            let ?directory_by_name = DiodeFileSystem.get_directory_by_name(fs, name_hash);
-            assert directory_by_name == directory;
           },
         );
 
@@ -83,18 +80,11 @@ persistent actor {
             let valid_id = make_blob(32, 1);
             let valid_name = make_blob(32, 2);
             let invalid_id = make_blob(16, 1);
-            let invalid_name = make_blob(16, 2);
 
             // Test invalid directory_id size
             switch (DiodeFileSystem.create_directory(fs, invalid_id, valid_name, null)) {
               case (#ok(_)) { assert false };
               case (#err(err)) { assert err == "directory_id must be 32 bytes" };
-            };
-
-            // Test invalid name_hash size
-            switch (DiodeFileSystem.create_directory(fs, valid_id, invalid_name, null)) {
-              case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "name_hash must be 32 bytes" };
             };
 
             // Test creating same directory twice
@@ -111,23 +101,22 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory first
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Add file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext, content_hash, ciphertext));
 
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
               case (#ok(file)) {
                 assert file.id == 1;
-                assert file.directory_id == directory_id;
-                assert file.name_hash == name_hash;
+                assert file.name_ciphertext == name_ciphertext;
                 assert file.content_hash == content_hash;
-                assert file.ciphertext == ciphertext;
+                assert DiodeFileSystem.read_file_content(fs, file) == ciphertext;
                 assert file.size == 5;
                 assert file.finalized == true;
               };
@@ -145,21 +134,21 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash1 = make_blob(32, 2);
-            let name_hash2 = make_blob(32, 3);
+            let name_ciphertext1 = make_blob(32, 2);
+            let name_ciphertext2 = make_blob(32, 3);
             let content_hash1 = make_blob(32, 4);
             let content_hash2 = make_blob(32, 5);
             let ciphertext1 = Blob.fromArray([1, 2, 3]);
             let ciphertext2 = Blob.fromArray([4, 5, 6, 7]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext1, null));
 
             // Add first file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext1, content_hash1, ciphertext1));
 
             // Add second file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext2, content_hash2, ciphertext2));
 
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
               case (#ok(file1)) {
@@ -203,11 +192,7 @@ persistent actor {
               case (#err(err)) { assert err == "directory_id must be 32 bytes" };
             };
 
-            // Test invalid name_hash size
-            switch (DiodeFileSystem.add_file(fs, valid_id, invalid_hash, valid_hash, valid_ciphertext)) {
-              case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "name_hash must be 32 bytes" };
-            };
+
 
             // Test invalid content_hash size
             switch (DiodeFileSystem.add_file(fs, valid_id, valid_hash, invalid_hash, valid_ciphertext)) {
@@ -231,9 +216,9 @@ persistent actor {
             // Each file: 50 bytes content + 120 bytes metadata = 170 bytes
             let fs = DiodeFileSystem.new(350); // Slightly larger than 2 files to test edge cases
             let directory_id = make_blob(32, 1);
-            let name_hash1 = make_blob(32, 2);
-            let name_hash2 = make_blob(32, 3);
-            let name_hash3 = make_blob(32, 4);
+            let name_ciphertext1 = make_blob(32, 2);
+            let name_ciphertext2 = make_blob(32, 3);
+            let name_ciphertext3 = make_blob(32, 4);
             let content_hash1 = make_blob(32, 5);
             let content_hash2 = make_blob(32, 6);
             let content_hash3 = make_blob(32, 7);
@@ -242,10 +227,10 @@ persistent actor {
             let ciphertext3 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 100)));
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext1, null));
 
             // Add first file (170 bytes)
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext1, content_hash1, ciphertext1));
 
             // Verify first file exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -257,7 +242,7 @@ persistent actor {
             };
 
             // Add second file (170 bytes, total 340 bytes - should fit)
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext2, content_hash2, ciphertext2));
 
             // Both files should exist
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -276,7 +261,7 @@ persistent actor {
 
             // Add third file (170 bytes, total would be 510 bytes > 350 bytes limit)
             // Should remove first file to make space
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash3, content_hash3, ciphertext3));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext3, content_hash3, ciphertext3));
 
             // First file should be removed (oldest file removed first)
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -308,18 +293,18 @@ persistent actor {
             // Create filesystem that can fit 1 file normally, but needs wrapping for a second
             let fs = DiodeFileSystem.new(250); // Between 1 file (170) and 2 files (340)
             let directory_id = make_blob(32, 1);
-            let name_hash1 = make_blob(32, 2);
-            let name_hash2 = make_blob(32, 3);
+            let name_ciphertext1 = make_blob(32, 2);
+            let name_ciphertext2 = make_blob(32, 3);
             let content_hash1 = make_blob(32, 4);
             let content_hash2 = make_blob(32, 5);
             let ciphertext1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i)));
             let ciphertext2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 50)));
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext1, null));
 
             // Add first file at position 0
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext1, content_hash1, ciphertext1));
 
             // Verify first file exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -331,7 +316,7 @@ persistent actor {
 
             // Add second file - won't fit at position 170, should trigger wrapping
             // But wrapping would overwrite first file, so first file should be removed
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext2, content_hash2, ciphertext2));
 
             // First file should be removed due to wrapping collision
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -354,20 +339,20 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash1 = make_blob(32, 2);
-            let name_hash2 = make_blob(32, 3);
+            let name_ciphertext1 = make_blob(32, 2);
+            let name_ciphertext2 = make_blob(32, 3);
             let content_hash = make_blob(32, 4);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext1, null));
 
             // Add first file
-            let result1 = DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash, ciphertext);
+            let result1 = DiodeFileSystem.add_file(fs, directory_id, name_ciphertext1, content_hash, ciphertext);
             assert isOkNat32(result1);
 
             // Try to add same content with different name
-            let result2 = DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash, ciphertext);
+            let result2 = DiodeFileSystem.add_file(fs, directory_id, name_ciphertext2, content_hash, ciphertext);
             assert isOkNat32(result2);
 
             // Should return the same file ID
@@ -388,21 +373,21 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Add file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext, content_hash, ciphertext));
 
             // Get file by ID
             let file = DiodeFileSystem.get_file_by_id(fs, 1);
             assert file.id == 1;
             assert file.content_hash == content_hash;
-            assert file.ciphertext == ciphertext;
+            assert DiodeFileSystem.read_file_content(fs, file) == ciphertext;
             assert file.finalized == true;
           },
         );
@@ -412,10 +397,10 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Get files in empty directory
             let files = DiodeFileSystem.get_files_in_directory(fs, directory_id);
@@ -440,15 +425,15 @@ persistent actor {
 
             // Create directory
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            let name_ciphertext = make_blob(32, 2);
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             assert DiodeFileSystem.get_directory_count(fs) == 1;
 
             // Add file
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext, content_hash, ciphertext));
 
             assert DiodeFileSystem.get_file_count(fs) == 1;
           },
@@ -470,15 +455,15 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Allocate file
-            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 10)) {
+            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_ciphertext, content_hash, 10)) {
               case (#ok(file_id)) {
                 assert file_id == 1;
               };
@@ -516,7 +501,7 @@ persistent actor {
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
               case (#ok(file)) {
                 assert file.finalized == true;
-                assert file.ciphertext == ciphertext;
+                assert DiodeFileSystem.read_file_content(fs, file) == ciphertext;
                 assert file.size == 10;
               };
               case (#err(_)) { assert false };
@@ -534,13 +519,13 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
             // Create directory and add file normally
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext, content_hash, ciphertext));
 
             // Read chunks
             switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
@@ -570,11 +555,11 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Try to write chunk to non-existent file
             let chunk = Blob.fromArray([1, 2, 3]);
@@ -584,7 +569,7 @@ persistent actor {
             };
 
             // Allocate file
-            assert isOkNat32(DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5));
+            assert isOkNat32(DiodeFileSystem.allocate_file(fs, directory_id, name_ciphertext, content_hash, 5));
 
             // Try to write out of bounds chunk
             switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 3, chunk)) {
@@ -611,15 +596,15 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Use write_file (should allocate, write chunk, and finalize in one call)
-            switch (DiodeFileSystem.write_file(fs, directory_id, name_hash, content_hash, ciphertext)) {
+            switch (DiodeFileSystem.write_file(fs, directory_id, name_ciphertext, content_hash, ciphertext)) {
               case (#ok(file_id)) {
                 assert file_id == 1;
               };
@@ -630,7 +615,7 @@ persistent actor {
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
               case (#ok(file)) {
                 assert file.finalized == true;
-                assert file.ciphertext == ciphertext;
+                assert DiodeFileSystem.read_file_content(fs, file) == ciphertext;
                 assert file.size == 5;
               };
               case (#err(_)) { assert false };
@@ -648,15 +633,15 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Allocate file
-            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5)) {
+            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_ciphertext, content_hash, 5)) {
               case (#ok(file_id)) {
                 assert file_id == 1;
               };
@@ -708,15 +693,15 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Add file normally
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_ciphertext, content_hash, ciphertext));
 
             // Verify file exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
@@ -768,14 +753,14 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null));
 
             // Allocate file but don't finalize
-            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5)) {
+            switch (DiodeFileSystem.allocate_file(fs, directory_id, name_ciphertext, content_hash, 5)) {
               case (#ok(file_id)) {
                 assert file_id == 1;
               };

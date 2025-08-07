@@ -258,80 +258,70 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
    * DiodeFileSystem API
    */
 
-  public shared (msg) func create_directory(directory_id : Blob, name_hash : Blob, parent_id : ?Blob) : async Result.Result<(), Text> {
-    assert_membership(msg.caller);
-    ignore await request_topup_if_low();
-    DiodeFileSystem.create_directory(file_system, directory_id, name_hash, parent_id);
+  public shared (msg) func create_directory(directory_id : Blob, name_ciphertext : Blob, parent_id : ?Blob) : async Result.Result<(), Text> {
+    assert_owner(msg.caller);
+    DiodeFileSystem.create_directory(file_system, directory_id, name_ciphertext, parent_id);
   };
 
-  public shared (msg) func add_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
-    assert_membership(msg.caller);
-    ignore await request_topup_if_low();
-    DiodeFileSystem.add_file(file_system, directory_id, name_hash, content_hash, ciphertext);
+  public shared (msg) func add_file(directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
+    assert_owner(msg.caller);
+    DiodeFileSystem.add_file(file_system, directory_id, name_ciphertext, content_hash, ciphertext);
   };
 
-  public shared (msg) func write_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
-    assert_membership(msg.caller);
-    ignore await request_topup_if_low();
-    DiodeFileSystem.write_file(file_system, directory_id, name_hash, content_hash, ciphertext);
+  public shared (msg) func write_file(directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
+    assert_owner(msg.caller);
+    DiodeFileSystem.write_file(file_system, directory_id, name_ciphertext, content_hash, ciphertext);
   };
 
   public shared (msg) func delete_file(content_hash : Blob) : async Result.Result<(), Text> {
-    assert_membership(msg.caller);
-    ignore await request_topup_if_low();
+    assert_owner(msg.caller);
     DiodeFileSystem.delete_file(file_system, content_hash);
   };
 
-  public shared (msg) func allocate_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, size : Nat64) : async Result.Result<Nat32, Text> {
-    assert_membership(msg.caller);
-    ignore await request_topup_if_low();
-    DiodeFileSystem.allocate_file(file_system, directory_id, name_hash, content_hash, size);
+  public shared (msg) func allocate_file(directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, size : Nat64) : async Result.Result<Nat32, Text> {
+    assert_owner(msg.caller);
+    DiodeFileSystem.allocate_file(file_system, directory_id, name_ciphertext, content_hash, size);
   };
 
   public shared (msg) func write_file_chunk(content_hash : Blob, chunk_offset : Nat64, chunk : Blob) : async Result.Result<(), Text> {
-    assert_membership(msg.caller);
+    assert_owner(msg.caller);
     ignore await request_topup_if_low();
     DiodeFileSystem.write_file_chunk(file_system, content_hash, chunk_offset, chunk);
   };
 
   public shared (msg) func finalize_file(content_hash : Blob) : async Result.Result<(), Text> {
-    assert_membership(msg.caller);
+    assert_owner(msg.caller);
     ignore await request_topup_if_low();
     DiodeFileSystem.finalize_file(file_system, content_hash);
   };
 
   public query (msg) func read_file_chunk(content_hash : Blob, chunk_offset : Nat64, chunk_size : Nat) : async Result.Result<Blob, Text> {
-    assert_membership(msg.caller);
+    assert_owner(msg.caller);
     DiodeFileSystem.read_file_chunk(file_system, content_hash, chunk_offset, chunk_size);
   };
 
   public query (msg) func get_file_by_hash(content_hash : Blob) : async Result.Result<DiodeFileSystem.File, Text> {
-    assert_membership(msg.caller);
+    assert_owner(msg.caller);
     DiodeFileSystem.get_file_by_hash(file_system, content_hash);
   };
 
   public query (msg) func get_file_by_id(file_id : Nat32) : async DiodeFileSystem.File {
-    assert_membership(msg.caller);
+    assert_owner(msg.caller);
     DiodeFileSystem.get_file_by_id(file_system, file_id);
   };
 
   public query (msg) func get_directory(directory_id : Blob) : async ?DiodeFileSystem.Directory {
-    assert_membership(msg.caller);
+    assert_owner(msg.caller);
     DiodeFileSystem.get_directory(file_system, directory_id);
   };
 
-  public query (msg) func get_directory_by_name(name_hash : Blob) : async ?DiodeFileSystem.Directory {
-    assert_membership(msg.caller);
-    DiodeFileSystem.get_directory_by_name(file_system, name_hash);
-  };
-
   public query (msg) func get_files_in_directory(directory_id : Blob) : async [DiodeFileSystem.File] {
-    assert_membership(msg.caller);
+    assert_owner(msg.caller);
     DiodeFileSystem.get_files_in_directory(file_system, directory_id);
   };
 
   public query (msg) func get_child_directories(directory_id : Blob) : async [DiodeFileSystem.Directory] {
-    assert_membership(msg.caller);
+    assert_owner(msg.caller);
     DiodeFileSystem.get_child_directories(file_system, directory_id);
   };
 
