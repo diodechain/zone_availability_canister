@@ -38,13 +38,10 @@ persistent actor {
 
             let ?directory = DiodeFileSystem.get_directory(fs, directory_id);
             assert directory.id == directory_id;
-            assert directory.name_hash == name_hash;
+            assert directory.name_ciphertext == name_hash;
             assert directory.parent_id == null;
             assert directory.child_directories.size() == 0;
             assert directory.child_files.size() == 0;
-
-            let ?directory_by_name = DiodeFileSystem.get_directory_by_name(fs, name_hash);
-            assert directory_by_name == directory;
           },
         );
 
@@ -91,11 +88,7 @@ persistent actor {
               case (#err(err)) { assert err == "directory_id must be 32 bytes" };
             };
 
-            // Test invalid name_hash size
-            switch (DiodeFileSystem.create_directory(fs, valid_id, invalid_name, null)) {
-              case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "name_hash must be 32 bytes" };
-            };
+            // Note: name_ciphertext validation was removed since we now support variable length encrypted names
 
             // Test creating same directory twice
             assert isOk(DiodeFileSystem.create_directory(fs, valid_id, valid_name, null));
@@ -125,11 +118,17 @@ persistent actor {
               case (#ok(file)) {
                 assert file.id == 1;
                 assert file.directory_id == directory_id;
-                assert file.name_hash == name_hash;
+                assert file.name_ciphertext == name_hash;
                 assert file.content_hash == content_hash;
-                assert file.ciphertext == ciphertext;
                 assert file.size == 5;
                 assert file.finalized == true;
+                // Verify ciphertext by reading the chunk
+                switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
+                  case (#ok(read_ciphertext)) {
+                    assert read_ciphertext == ciphertext;
+                  };
+                  case (#err(_)) { assert false };
+                };
               };
               case (#err(_)) { assert false };
             };
@@ -203,11 +202,7 @@ persistent actor {
               case (#err(err)) { assert err == "directory_id must be 32 bytes" };
             };
 
-            // Test invalid name_hash size
-            switch (DiodeFileSystem.add_file(fs, valid_id, invalid_hash, valid_hash, valid_ciphertext)) {
-              case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "name_hash must be 32 bytes" };
-            };
+            // Note: name_ciphertext validation was removed since we now support variable length encrypted names
 
             // Test invalid content_hash size
             switch (DiodeFileSystem.add_file(fs, valid_id, valid_hash, invalid_hash, valid_ciphertext)) {
@@ -399,11 +394,20 @@ persistent actor {
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
 
             // Get file by ID
-            let file = DiodeFileSystem.get_file_by_id(fs, 1);
+            let ?file = DiodeFileSystem.get_file_by_id(fs, 1) else {
+              assert false;
+              return;
+            };
             assert file.id == 1;
             assert file.content_hash == content_hash;
-            assert file.ciphertext == ciphertext;
             assert file.finalized == true;
+            // Verify ciphertext by reading the chunk
+            switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
+              case (#ok(read_ciphertext)) {
+                assert read_ciphertext == ciphertext;
+              };
+              case (#err(_)) { assert false };
+            };
           },
         );
 
@@ -516,8 +520,14 @@ persistent actor {
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
               case (#ok(file)) {
                 assert file.finalized == true;
-                assert file.ciphertext == ciphertext;
                 assert file.size == 10;
+                // Verify ciphertext by reading the chunk
+                switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 10)) {
+                  case (#ok(read_ciphertext)) {
+                    assert read_ciphertext == ciphertext;
+                  };
+                  case (#err(_)) { assert false };
+                };
               };
               case (#err(_)) { assert false };
             };
@@ -630,8 +640,14 @@ persistent actor {
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
               case (#ok(file)) {
                 assert file.finalized == true;
-                assert file.ciphertext == ciphertext;
                 assert file.size == 5;
+                // Verify ciphertext by reading the chunk
+                switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
+                  case (#ok(read_ciphertext)) {
+                    assert read_ciphertext == ciphertext;
+                  };
+                  case (#err(_)) { assert false };
+                };
               };
               case (#err(_)) { assert false };
             };
