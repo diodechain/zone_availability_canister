@@ -20,9 +20,9 @@ actor {
           func() : async () {
             let fs = DiodeFileSystem.new(200); // Small storage to trigger ring buffer
             let directory_id = make_blob(32, 1);
-            let name_hash1 = make_blob(32, 2);
-            let name_hash2 = make_blob(32, 3);
-            let name_hash3 = make_blob(32, 4);
+            let name_ciphertext1 = make_blob(32, 2);
+            let name_ciphertext2 = make_blob(32, 3);
+            let name_ciphertext3 = make_blob(32, 4);
             let content_hash1 = make_blob(32, 5);
             let content_hash2 = make_blob(32, 6);
             let content_hash3 = make_blob(32, 7);
@@ -31,10 +31,10 @@ actor {
             let ciphertext3 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 100)));
 
             Debug.print("=== STEP 1: Create directory ===");
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext1, null));
 
             Debug.print("=== STEP 2: Add first file ===");
-            let add1 = DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1);
+            let add1 = DiodeFileSystem.add_file(fs, directory_id, name_ciphertext1, content_hash1, ciphertext1);
             Debug.print("Add file 1 result: " # debug_show (add1));
             Debug.print("Usage after file 1: " # debug_show (DiodeFileSystem.get_usage(fs)));
 
@@ -43,7 +43,7 @@ actor {
             Debug.print("Get file 1 result: " # debug_show (get1));
 
             Debug.print("=== STEP 4: Add second file ===");
-            let add2 = DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2);
+            let add2 = DiodeFileSystem.add_file(fs, directory_id, name_ciphertext2, content_hash2, ciphertext2);
             Debug.print("Add file 2 result: " # debug_show (add2));
             Debug.print("Usage after file 2: " # debug_show (DiodeFileSystem.get_usage(fs)));
 
@@ -54,7 +54,7 @@ actor {
             Debug.print("Get file 2: " # debug_show (get2));
 
             Debug.print("=== STEP 6: Add third file (should trigger ring buffer) ===");
-            let add3 = DiodeFileSystem.add_file(fs, directory_id, name_hash3, content_hash3, ciphertext3);
+            let add3 = DiodeFileSystem.add_file(fs, directory_id, name_ciphertext3, content_hash3, ciphertext3);
             Debug.print("Add file 3 result: " # debug_show (add3));
             Debug.print("Usage after file 3: " # debug_show (DiodeFileSystem.get_usage(fs)));
 

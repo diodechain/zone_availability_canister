@@ -20,16 +20,16 @@ actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
-            let name_hash = make_blob(32, 2);
+            let name_ciphertext = make_blob(32, 2);
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             Debug.print("=== STEP 1: Create directory ===");
-            let dir_result = DiodeFileSystem.create_directory(fs, directory_id, name_hash, null);
+            let dir_result = DiodeFileSystem.create_directory(fs, directory_id, name_ciphertext, null);
             Debug.print("Directory result: " # debug_show (dir_result));
 
             Debug.print("=== STEP 2: Add file ===");
-            let add_result = DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext);
+            let add_result = DiodeFileSystem.add_file(fs, directory_id, name_ciphertext, content_hash, ciphertext);
             Debug.print("Add result: " # debug_show (add_result));
 
             Debug.print("=== STEP 3: Check file count ===");
