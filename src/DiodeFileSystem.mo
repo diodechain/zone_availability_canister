@@ -73,7 +73,7 @@ module DiodeFileSystem {
       case (null) {
         // passthrough
       };
-      case (?value) {
+      case (?_value) {
         return #err("directory already exists");
       };
     };
@@ -130,7 +130,7 @@ module DiodeFileSystem {
     // Check if directory exists
     switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
       case (null) { return #err("directory not found") };
-      case (?directory) { /* passthrough */ };
+      case (?_directory) { /* passthrough */ };
     };
     let file_size = Nat64.fromNat(ciphertext.size());
     let total_size = file_size + file_entry_size;
@@ -246,7 +246,7 @@ module DiodeFileSystem {
           case (null) { return #err("file not found in global files") };
           case (?f) { f };
         };
-        
+
         let directory_id = file.directory_id;
 
         // Remove from file index maps
@@ -308,7 +308,7 @@ module DiodeFileSystem {
     // Check if directory exists
     switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
       case (null) { return #err("directory not found") };
-      case (?directory) { /* passthrough */ };
+      case (?_directory) { /* passthrough */ };
     };
 
     let total_size = size + file_entry_size;
@@ -323,7 +323,7 @@ module DiodeFileSystem {
     let content_offset = fs.end_offset;
     WriteableBand.writeNat64(fs.files, content_offset, size); // store length first
     // Content space is reserved but not written yet (will be written by write_file_chunk)
-    
+
     fs.end_offset += total_size;
     fs.current_storage += total_size;
 
@@ -406,8 +406,6 @@ module DiodeFileSystem {
           case (null) { return #err("file not found") };
           case (?f) { f };
         };
-        
-        let directory_id = file.directory_id;
 
         // Check if already finalized
         if (file.finalized) {
@@ -425,7 +423,7 @@ module DiodeFileSystem {
           size = file.size;
           finalized = true;
         };
-        
+
         Map.set<Nat32, File>(fs.global_files, Map.n32hash, file_id, finalized_file);
 
         return #ok();
@@ -477,28 +475,28 @@ module DiodeFileSystem {
       case (?length_offset) {
         // Read the file size from WriteableBand
         let size = WriteableBand.readNat64(fs.files, length_offset);
-        
+
         // Find the file that has this offset (length_offset + 8)
         let ciphertext_offset = length_offset + 8;
         var found_file : ?File = null;
-        
+
         label find_loop for ((file_id, file) in Map.entries(fs.global_files)) {
           if (file.offset == ciphertext_offset) {
             found_file := ?file;
             break find_loop;
           };
         };
-        
+
         switch (found_file) {
           case (?file) {
             let file_id = file.id;
             let content_hash = file.content_hash;
             let directory_id = file.directory_id;
 
-                        // Remove from file index and global files map
+            // Remove from file index and global files map
             Map.delete<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash);
             Map.delete<Nat32, File>(fs.global_files, Map.n32hash, file_id);
-            
+
             // Update directory file entries
             switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
               case (null) {};
@@ -539,7 +537,7 @@ module DiodeFileSystem {
   public func get_file_by_hash(fs : FileSystem, content_hash : Blob) : Result.Result<File, Text> {
     switch (Map.get<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash)) {
       case (null) { #err("file not found") };
-      case (?file_id) { 
+      case (?file_id) {
         switch (get_file_by_id(fs, file_id)) {
           case (null) { #err("file not found in directories") };
           case (?file) { #ok(file) };
@@ -552,26 +550,25 @@ module DiodeFileSystem {
     return Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id);
   };
 
-
-
   public func get_directory(fs : FileSystem, directory_id : Blob) : ?Directory {
     return Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id);
   };
-
-
 
   public func get_files_in_directory(fs : FileSystem, directory_id : Blob) : [File] {
     switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
       case (null) { [] };
       case (?directory) {
-        let files = Array.mapFilter<Nat32, File>(directory.child_files, func(file_id : Nat32) : ?File {
-          switch (Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id)) {
-            case (?file) {
-              if (file.finalized) { ?file } else { null };
+        let files = Array.mapFilter<Nat32, File>(
+          directory.child_files,
+          func(file_id : Nat32) : ?File {
+            switch (Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id)) {
+              case (?file) {
+                if (file.finalized) { ?file } else { null };
+              };
+              case (null) { null };
             };
-            case (null) { null };
-          };
-        });
+          },
+        );
         files;
       };
     };

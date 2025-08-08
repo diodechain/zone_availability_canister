@@ -18,7 +18,7 @@ import MetaData "./MetaData";
 import Prim "mo:⛔";
 import DiodeAttachments "./DiodeAttachments";
 
-shared (_init_msg) actor class ZoneAvailabilityCanister(
+shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   _args : {
     zone_id : Text;
     rpc_host : Text;
@@ -30,16 +30,16 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     Oracle.transform_function(args);
   };
 
-  stable var dm : DiodeMessages.MessageStore = DiodeMessages.new();
-  stable var zone_members : MemberCache.Cache = MemberCache.new(_args.zone_id, _args.rpc_host, _args.rpc_path, oracle_transform_function);
-  stable var installation_id : Int = Time.now();
-  stable var meta_data : MetaData.MetaData = MetaData.new();
-  stable var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);
-  stable var file_system : DiodeFileSystem.FileSystem = DiodeFileSystem.new(128_000_000);
+  var dm : DiodeMessages.MessageStore = DiodeMessages.new();
+  var zone_members : MemberCache.Cache = MemberCache.new(_args.zone_id, _args.rpc_host, _args.rpc_path, oracle_transform_function);
+  var installation_id : Int = Time.now();
+  var meta_data : MetaData.MetaData = MetaData.new();
+  var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);
+  var file_system : DiodeFileSystem.FileSystem = DiodeFileSystem.new(128_000_000);
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below .7 trillion cycles, topup by .5 trillion (~65 cents)
-  stable var cycles_requester : CyclesRequester.CyclesRequester = CyclesRequester.init({
+  var cycles_requester : CyclesRequester.CyclesRequester = CyclesRequester.init({
     batteryCanisterPrincipal = _args.cycles_requester_id;
     topupRule = {
       threshold = 700_000_000_000;
@@ -310,7 +310,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
     DiodeFileSystem.get_file_by_hash(file_system, content_hash);
   };
 
-  public query (msg) func get_file_by_id(file_id : Nat32) : async DiodeFileSystem.File {
+  public query (msg) func get_file_by_id(file_id : Nat32) : async ?DiodeFileSystem.File {
     assert_membership(msg.caller);
     DiodeFileSystem.get_file_by_id(file_system, file_id);
   };
@@ -318,11 +318,6 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   public query (msg) func get_directory(directory_id : Blob) : async ?DiodeFileSystem.Directory {
     assert_membership(msg.caller);
     DiodeFileSystem.get_directory(file_system, directory_id);
-  };
-
-  public query (msg) func get_directory_by_name(name_hash : Blob) : async ?DiodeFileSystem.Directory {
-    assert_membership(msg.caller);
-    DiodeFileSystem.get_directory_by_name(file_system, name_hash);
   };
 
   public query (msg) func get_files_in_directory(directory_id : Blob) : async [DiodeFileSystem.File] {
@@ -388,7 +383,7 @@ shared (_init_msg) actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    400;
+    401;
   };
 
   public query func get_stable_storage_size() : async Nat {

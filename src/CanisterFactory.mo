@@ -13,9 +13,9 @@ import Iter "mo:base/Iter";
 
 // A simple battery canister actor example that implements the cycles_manager_transferCycles API of the CyclesManager.Interface
 
-actor CanisterFactory {
+persistent actor CanisterFactory {
   // Initializes a cycles manager
-  stable let cyclesManager = CyclesManager.init({
+  let cyclesManager = CyclesManager.init({
     // By default, with each transfer request 500 billion cycles will be transferred
     // to the requesting canister, provided they are permitted to request cycles
     //
@@ -141,7 +141,12 @@ actor CanisterFactory {
       canister_id = canisterId;
       arg = arg;
       wasm_module = wasmModule;
-      mode = #upgrade(null);
+      mode = #upgrade(
+        ?{
+          wasm_memory_persistence = ?#replace;
+          skip_pre_upgrade = null;
+        }
+      );
       sender_canister_version = null;
     });
 
@@ -172,7 +177,7 @@ actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    103;
+    104;
   };
 
   public shared func get_stable_size() : async Nat32 {
