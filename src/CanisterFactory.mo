@@ -11,8 +11,6 @@ import ZoneAvailabilityCanister "ZoneAvailabilityCanister";
 import BTree "mo:btree/BTree";
 import Iter "mo:base/Iter";
 
-// A simple battery canister actor example that implements the cycles_manager_transferCycles API of the CyclesManager.Interface
-
 persistent actor CanisterFactory {
   // Initializes a cycles manager
   let cyclesManager = CyclesManager.init({

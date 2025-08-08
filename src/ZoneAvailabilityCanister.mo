@@ -361,15 +361,6 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     await* CyclesRequester.requestTopupIfBelowThreshold(cycles_requester);
   };
 
-  public shared func test_record_output() : async ((Nat32, Nat32)) {
-    (0, 1);
-  };
-
-  public shared func test_record_input(record : (Nat32, Nat32)) : async Nat32 {
-    let (a, b) = record;
-    a + b;
-  };
-
   public query func get_zone_id() : async Text {
     zone_members.zone_id;
   };

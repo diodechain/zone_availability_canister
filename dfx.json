@@ -3,7 +3,8 @@
   "canisters": {
     "CanisterFactory": {
       "type": "motoko",
-      "main": "src/CanisterFactory.mo"
+      "main": "src/CanisterFactory.mo",
+      "args": "--enhanced-orthogonal-persistence"
     },
     "ZoneAvailabilityCanister": {
       "type": "motoko",
@@ -13,6 +14,11 @@
     "VetKeyTest": {
       "type": "motoko",
       "main": "src/VetKeyTest.mo"
+    },
+    "TestCanister": {
+      "type": "motoko",
+      "main": "src/TestCanister.mo",
+      "args": "--enhanced-orthogonal-persistence"
     }
   },
   "defaults": {

@@ -2,6 +2,9 @@
   "CanisterFactory": {
     "ic": "dgnum-qiaaa-aaaao-qj3ta-cai"
   },
+  "TestCanister": {
+    "ic": "tnqzy-zaaaa-aaaao-qkeza-cai"
+  },
   "VetKeyTest": {
     "ic": "kkcrz-5qaaa-aaaao-qkbzq-cai"
   }
