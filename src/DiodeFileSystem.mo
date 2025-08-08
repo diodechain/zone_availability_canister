@@ -27,7 +27,7 @@ module DiodeFileSystem {
     parent_id : ?Blob; // null for root
     timestamp : Nat32;
     child_directories : [Blob];
-    child_files : Map.Map<Nat32, File>; // file_id -> File for O(1) lookups
+    child_files : [Nat32]; // array of global file IDs
   };
 
   let file_entry_size : Nat64 = 8; // only storing length (Nat64) for the ciphertext
@@ -35,6 +35,7 @@ module DiodeFileSystem {
   public type FileSystem = {
     var files : WriteableBand.WriteableBand; // ring buffer for file contents
     var file_index : Nat32;
+    var global_files : Map.Map<Nat32, File>; // global file_id -> File map
     var directories : Map.Map<Blob, Directory>;
     var file_index_map : Map.Map<Blob, Nat32>; // content_hash -> file_id
     var max_storage : Nat64;
@@ -48,6 +49,7 @@ module DiodeFileSystem {
     return {
       var files = WriteableBand.new();
       var file_index = 1;
+      var global_files = Map.new<Nat32, File>();
       var directories = Map.new<Blob, Directory>();
       var file_index_map = Map.new<Blob, Nat32>();
       var max_storage = max_storage;
@@ -82,7 +84,7 @@ module DiodeFileSystem {
       parent_id = parent_id;
       timestamp = Nat32.fromNat(abs(now()) / 1_000_000_000);
       child_directories = [];
-      child_files = Map.new<Nat32, File>();
+      child_files = [];
     };
 
     Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, directory);
@@ -183,21 +185,21 @@ module DiodeFileSystem {
       finalized = true;
     };
 
+    // Store in global files map
+    Map.set<Nat32, File>(fs.global_files, Map.n32hash, fs.file_index, file);
+
     // Update directory's child_files
     let directory = Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id);
     switch (directory) {
       case (null) { return #err("directory not found during update") };
       case (?dir) {
-        let updated_child_files = Map.fromIter<Nat32, File>(Map.entries(dir.child_files), Map.n32hash);
-        Map.set<Nat32, File>(updated_child_files, Map.n32hash, file.id, file);
-        
         let updated_directory : Directory = {
           id = dir.id;
           name_ciphertext = dir.name_ciphertext;
           parent_id = dir.parent_id;
           timestamp = dir.timestamp;
           child_directories = dir.child_directories;
-          child_files = updated_child_files;
+          child_files = Array.append(dir.child_files, [fs.file_index]);
         };
         Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
       };
@@ -239,50 +241,31 @@ module DiodeFileSystem {
         return #err("file not found");
       };
       case (?file_id) {
-        // Find the file in directories to get directory_id and file details
-        var found_file : ?File = null;
-        var found_directory_id : ?Blob = null;
-        
-        label find_loop for ((dir_id, directory) in Map.entries(fs.directories)) {
-          switch (Map.get<Nat32, File>(directory.child_files, Map.n32hash, file_id)) {
-            case (?file) {
-              found_file := ?file;
-              found_directory_id := ?dir_id;
-              break find_loop;
-            };
-            case (null) { /* continue searching */ };
-          };
-        };
-        
-        let file = switch (found_file) {
-          case (null) { return #err("file not found in directories") };
+        // Get file from global files map
+        let file = switch (Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id)) {
+          case (null) { return #err("file not found in global files") };
           case (?f) { f };
         };
         
-        let directory_id = switch (found_directory_id) {
-          case (null) { return #err("directory not found") };
-          case (?d) { d };
-        };
+        let directory_id = file.directory_id;
 
         // Remove from file index maps
         Map.delete<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash);
+        Map.delete<Nat32, File>(fs.global_files, Map.n32hash, file_id);
 
-        // Remove from directory's child_files map
+        // Remove from directory's child_files array
         switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
           case (null) {
             return #err("directory not found during delete");
           };
           case (?dir) {
-            let updated_child_files = Map.fromIter<Nat32, File>(Map.entries(dir.child_files), Map.n32hash);
-            Map.delete<Nat32, File>(updated_child_files, Map.n32hash, file_id);
-            
             let updated_directory : Directory = {
               id = dir.id;
               name_ciphertext = dir.name_ciphertext;
               parent_id = dir.parent_id;
               timestamp = dir.timestamp;
               child_directories = dir.child_directories;
-              child_files = updated_child_files;
+              child_files = Array.filter<Nat32>(dir.child_files, func(fid : Nat32) : Bool { fid != file_id });
             };
             Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
           };
@@ -359,21 +342,21 @@ module DiodeFileSystem {
       finalized = false;
     };
 
+    // Store in global files map
+    Map.set<Nat32, File>(fs.global_files, Map.n32hash, fs.file_index, file);
+
     // Add to directory's child_files
     let directory = Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id);
     switch (directory) {
       case (null) { return #err("directory not found during allocate") };
       case (?dir) {
-        let updated_child_files = Map.fromIter<Nat32, File>(Map.entries(dir.child_files), Map.n32hash);
-        Map.set<Nat32, File>(updated_child_files, Map.n32hash, file.id, file);
-        
         let updated_directory : Directory = {
           id = dir.id;
           name_ciphertext = dir.name_ciphertext;
           parent_id = dir.parent_id;
           timestamp = dir.timestamp;
           child_directories = dir.child_directories;
-          child_files = updated_child_files;
+          child_files = Array.append(dir.child_files, [fs.file_index]);
         };
         Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
       };
@@ -390,21 +373,9 @@ module DiodeFileSystem {
         return #err("file not found");
       };
       case (?file_id) {
-        // Find the file in directories to get file details
-        var found_file : ?File = null;
-        
-        label find_loop for ((dir_id, directory) in Map.entries(fs.directories)) {
-          switch (Map.get<Nat32, File>(directory.child_files, Map.n32hash, file_id)) {
-            case (?file) {
-              found_file := ?file;
-              break find_loop;
-            };
-            case (null) { /* continue searching */ };
-          };
-        };
-        
-        let file = switch (found_file) {
-          case (null) { return #err("file not found in directories") };
+        // Get file from global files map
+        let file = switch (Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id)) {
+          case (null) { return #err("file not found") };
           case (?f) { f };
         };
 
@@ -430,69 +401,32 @@ module DiodeFileSystem {
         return #err("file not found");
       };
       case (?file_id) {
-        // Find the file in directories to get file details and directory_id
-        var found_file : ?File = null;
-        var found_directory_id : ?Blob = null;
-        
-        label find_loop for ((dir_id, directory) in Map.entries(fs.directories)) {
-          switch (Map.get<Nat32, File>(directory.child_files, Map.n32hash, file_id)) {
-            case (?file) {
-              found_file := ?file;
-              found_directory_id := ?dir_id;
-              break find_loop;
-            };
-            case (null) { /* continue searching */ };
-          };
-        };
-        
-        let file = switch (found_file) {
-          case (null) { return #err("file not found in directories") };
+        // Get file from global files map
+        let file = switch (Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id)) {
+          case (null) { return #err("file not found") };
           case (?f) { f };
         };
         
-        let directory_id = switch (found_directory_id) {
-          case (null) { return #err("directory not found") };
-          case (?d) { d };
-        };
+        let directory_id = file.directory_id;
 
         // Check if already finalized
         if (file.finalized) {
           return #ok(); // Already finalized, nothing to do
         };
 
-        // No need to mark as finalized in writeable band since we store this in File struct
-
-        // Update the File struct in directory's child_files to mark as finalized
-        let directory = Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id);
-        switch (directory) {
-          case (null) { return #err("directory not found during finalize") };
-          case (?dir) {
-            let updated_child_files = Map.fromIter<Nat32, File>(Map.entries(dir.child_files), Map.n32hash);
-            
-            let finalized_file : File = {
-              id = file.id;
-              timestamp = file.timestamp;
-              directory_id = file.directory_id;
-              name_ciphertext = file.name_ciphertext;
-              content_hash = file.content_hash;
-              offset = file.offset;
-              size = file.size;
-              finalized = true;
-            };
-            
-            Map.set<Nat32, File>(updated_child_files, Map.n32hash, file_id, finalized_file);
-            
-            let updated_directory : Directory = {
-              id = dir.id;
-              name_ciphertext = dir.name_ciphertext;
-              parent_id = dir.parent_id;
-              timestamp = dir.timestamp;
-              child_directories = dir.child_directories;
-              child_files = updated_child_files;
-            };
-            Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
-          };
+        // Update the File struct in global files map to mark as finalized
+        let finalized_file : File = {
+          id = file.id;
+          timestamp = file.timestamp;
+          directory_id = file.directory_id;
+          name_ciphertext = file.name_ciphertext;
+          content_hash = file.content_hash;
+          offset = file.offset;
+          size = file.size;
+          finalized = true;
         };
+        
+        Map.set<Nat32, File>(fs.global_files, Map.n32hash, file_id, finalized_file);
 
         return #ok();
       };
@@ -505,21 +439,9 @@ module DiodeFileSystem {
         return #err("file not found");
       };
       case (?file_id) {
-        // Find the file in directories to get file details
-        var found_file : ?File = null;
-        
-        label find_loop for ((dir_id, directory) in Map.entries(fs.directories)) {
-          switch (Map.get<Nat32, File>(directory.child_files, Map.n32hash, file_id)) {
-            case (?file) {
-              found_file := ?file;
-              break find_loop;
-            };
-            case (null) { /* continue searching */ };
-          };
-        };
-        
-        let file = switch (found_file) {
-          case (null) { return #err("file not found in directories") };
+        // Get file from global files map
+        let file = switch (Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id)) {
+          case (null) { return #err("file not found") };
           case (?f) { f };
         };
 
@@ -559,39 +481,35 @@ module DiodeFileSystem {
         // Find the file that has this offset (length_offset + 8)
         let ciphertext_offset = length_offset + 8;
         var found_file : ?File = null;
-        var found_directory_id : ?Blob = null;
         
-        label find_loop for ((dir_id, directory) in Map.entries(fs.directories)) {
-          for ((file_id, file) in Map.entries(directory.child_files)) {
-            if (file.offset == ciphertext_offset) {
-              found_file := ?file;
-              found_directory_id := ?dir_id;
-              break find_loop;
-            };
+        label find_loop for ((file_id, file) in Map.entries(fs.global_files)) {
+          if (file.offset == ciphertext_offset) {
+            found_file := ?file;
+            break find_loop;
           };
         };
         
-        switch (found_file, found_directory_id) {
-          case (?file, ?directory_id) {
+        switch (found_file) {
+          case (?file) {
             let file_id = file.id;
             let content_hash = file.content_hash;
+            let directory_id = file.directory_id;
 
-            // Remove from file index
+                        // Remove from file index and global files map
             Map.delete<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash);
+            Map.delete<Nat32, File>(fs.global_files, Map.n32hash, file_id);
+            
             // Update directory file entries
             switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
               case (null) {};
-                             case (?dir) {
-                 let updated_child_files = Map.fromIter<Nat32, File>(Map.entries(dir.child_files), Map.n32hash);
-                 Map.delete<Nat32, File>(updated_child_files, Map.n32hash, file_id);
-                
+              case (?dir) {
                 let updated_directory : Directory = {
                   id = dir.id;
                   name_ciphertext = dir.name_ciphertext;
                   parent_id = dir.parent_id;
                   timestamp = dir.timestamp;
                   child_directories = dir.child_directories;
-                  child_files = updated_child_files;
+                  child_files = Array.filter<Nat32>(dir.child_files, func(fid : Nat32) : Bool { fid != file_id });
                 };
                 Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
               };
@@ -609,12 +527,8 @@ module DiodeFileSystem {
             // For now, just set to null. It will be recalculated when needed.
             fs.next_entry_offset := null;
           };
-          case (null, _) {
+          case (null) {
             // File not found, just set next_entry_offset to null
-            fs.next_entry_offset := null;
-          };
-          case (_, null) {
-            // Directory not found, just set next_entry_offset to null
             fs.next_entry_offset := null;
           };
         };
@@ -635,16 +549,7 @@ module DiodeFileSystem {
   };
 
   public func get_file_by_id(fs : FileSystem, file_id : Nat32) : ?File {
-    // Find the file in directories
-    for ((dir_id, directory) in Map.entries(fs.directories)) {
-      switch (Map.get<Nat32, File>(directory.child_files, Map.n32hash, file_id)) {
-        case (?file) {
-          return ?file;
-        };
-        case (null) { /* continue searching */ };
-      };
-    };
-    return null;
+    return Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id);
   };
 
 
@@ -659,8 +564,15 @@ module DiodeFileSystem {
     switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
       case (null) { [] };
       case (?directory) {
-        let all_files = Iter.toArray<File>(Map.vals<Nat32, File>(directory.child_files));
-        Array.filter<File>(all_files, func(f : File) : Bool { f.finalized });
+        let files = Array.mapFilter<Nat32, File>(directory.child_files, func(file_id : Nat32) : ?File {
+          switch (Map.get<Nat32, File>(fs.global_files, Map.n32hash, file_id)) {
+            case (?file) {
+              if (file.finalized) { ?file } else { null };
+            };
+            case (null) { null };
+          };
+        });
+        files;
       };
     };
   };

@@ -42,7 +42,7 @@ persistent actor {
             assert directory.name_ciphertext == name_hash;
             assert directory.parent_id == null;
             assert directory.child_directories.size() == 0;
-            assert Map.size(directory.child_files) == 0;
+            assert directory.child_files.size() == 0;
           },
         );
 
@@ -223,9 +223,9 @@ persistent actor {
         await test(
           "Should handle ring-buffer behavior correctly",
           func() : async () {
-            // Create file system with capacity for exactly 2 files (170 bytes each = 340 bytes total)
-            // Each file: 50 bytes content + 120 bytes metadata = 170 bytes
-            let fs = DiodeFileSystem.new(350); // Slightly larger than 2 files to test edge cases
+            // Create file system with capacity for exactly 2 files (120 bytes each = 256 bytes total)
+            // Each file: 120 bytes content + 8 bytes metadata = 128 bytes
+            let fs = DiodeFileSystem.new(300); // Allows 2 files (256 bytes) but not 3 files (384 bytes)
             let directory_id = make_blob(32, 1);
             let name_hash1 = make_blob(32, 2);
             let name_hash2 = make_blob(32, 3);
@@ -233,26 +233,26 @@ persistent actor {
             let content_hash1 = make_blob(32, 5);
             let content_hash2 = make_blob(32, 6);
             let content_hash3 = make_blob(32, 7);
-            let ciphertext1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i)));
-            let ciphertext2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 50)));
-            let ciphertext3 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 100)));
+            let ciphertext1 = Blob.fromArray(Array.tabulate<Nat8>(120, func i = Nat8.fromIntWrap(i)));
+            let ciphertext2 = Blob.fromArray(Array.tabulate<Nat8>(120, func i = Nat8.fromIntWrap(i + 50)));
+            let ciphertext3 = Blob.fromArray(Array.tabulate<Nat8>(120, func i = Nat8.fromIntWrap(i + 100)));
 
             // Create directory
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
 
-            // Add first file (170 bytes)
+            // Add first file (128 bytes)
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
 
             // Verify first file exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
               case (#ok(file1)) {
                 assert file1.content_hash == content_hash1;
-                assert file1.size == 50;
+                assert file1.size == 120;
               };
               case (#err(_)) { assert false };
             };
 
-            // Add second file (170 bytes, total 340 bytes - should fit)
+            // Add second file (128 bytes, total 256 bytes - should fit in 300 bytes)
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
 
             // Both files should exist
@@ -270,7 +270,7 @@ persistent actor {
               case (#err(_)) { assert false };
             };
 
-            // Add third file (170 bytes, total would be 510 bytes > 350 bytes limit)
+            // Add third file (128 bytes, total would be 384 bytes > 300 bytes limit)
             // Should remove first file to make space
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash3, content_hash3, ciphertext3));
 
