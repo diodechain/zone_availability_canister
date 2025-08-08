@@ -302,19 +302,19 @@ persistent actor {
           func() : async () {
             // Test wrapping when files don't fit at current position
             // Create filesystem that can fit 1 file normally, but needs wrapping for a second
-            let fs = DiodeFileSystem.new(250); // Between 1 file (170) and 2 files (340)
+            let fs = DiodeFileSystem.new(140); // Between 1 file (128 bytes) and 2 files (256 bytes)
             let directory_id = make_blob(32, 1);
             let name_hash1 = make_blob(32, 2);
             let name_hash2 = make_blob(32, 3);
             let content_hash1 = make_blob(32, 4);
             let content_hash2 = make_blob(32, 5);
-            let ciphertext1 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i)));
-            let ciphertext2 = Blob.fromArray(Array.tabulate<Nat8>(50, func i = Nat8.fromIntWrap(i + 50)));
+            let ciphertext1 = Blob.fromArray(Array.tabulate<Nat8>(120, func i = Nat8.fromIntWrap(i)));
+            let ciphertext2 = Blob.fromArray(Array.tabulate<Nat8>(120, func i = Nat8.fromIntWrap(i + 50)));
 
             // Create directory
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
 
-            // Add first file at position 0
+            // Add first file at position 0 (128 bytes)
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
 
             // Verify first file exists
@@ -325,8 +325,7 @@ persistent actor {
               case (#err(_)) { assert false };
             };
 
-            // Add second file - won't fit at position 170, should trigger wrapping
-            // But wrapping would overwrite first file, so first file should be removed
+            // Add second file - won't fit (128 + 128 = 256 > 140), should trigger removal of first file
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
 
             // First file should be removed due to wrapping collision
