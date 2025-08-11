@@ -17,7 +17,7 @@ persistent actor {
       func() : async () {
 
         await test(
-          "Should create new file system",
+          "Should create new file system with root directory",
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             assert fs.max_storage == 1000;
@@ -25,24 +25,37 @@ persistent actor {
             assert fs.file_index == 1;
             assert fs.end_offset == 0;
             assert fs.next_entry_offset == null;
+            
+            // Root directory should be automatically created
+            assert DiodeFileSystem.get_directory_count(fs) == 1;
+            let ?root = DiodeFileSystem.get_root_directory(fs);
+            assert root.id == DiodeFileSystem.ROOT_DIRECTORY_ID;
+            assert root.parent_id == null;
+            assert root.child_directories.size() == 0;
+            assert root.child_files.size() == 0;
           },
         );
 
         await test(
-          "Should create directory",
+          "Should create directory under root",
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
             let directory_id = make_blob(32, 1);
             let name_hash = make_blob(32, 2);
 
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             let ?directory = DiodeFileSystem.get_directory(fs, directory_id);
             assert directory.id == directory_id;
             assert directory.name_ciphertext == name_hash;
-            assert directory.parent_id == null;
+            assert directory.parent_id == ?DiodeFileSystem.ROOT_DIRECTORY_ID;
             assert directory.child_directories.size() == 0;
             assert directory.child_files.size() == 0;
+            
+            // Root should now contain this directory
+            let ?root = DiodeFileSystem.get_root_directory(fs);
+            assert root.child_directories.size() == 1;
+            assert root.child_directories[0] == directory_id;
           },
         );
 
@@ -55,8 +68,8 @@ persistent actor {
             let parent_name = make_blob(32, 3);
             let child_name = make_blob(32, 4);
 
-            // Create parent directory
-            assert isOk(DiodeFileSystem.create_directory(fs, parent_id, parent_name, null));
+            // Create parent directory under root
+            assert isOk(DiodeFileSystem.create_directory(fs, parent_id, parent_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Create child directory
             assert isOk(DiodeFileSystem.create_directory(fs, child_id, child_name, ?parent_id));
@@ -84,16 +97,33 @@ persistent actor {
             let invalid_name = make_blob(16, 2);
 
             // Test invalid directory_id size
-            switch (DiodeFileSystem.create_directory(fs, invalid_id, valid_name, null)) {
+            switch (DiodeFileSystem.create_directory(fs, invalid_id, valid_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID)) {
               case (#ok(_)) { assert false };
               case (#err(err)) { assert err == "directory_id must be 32 bytes" };
             };
 
-            // Note: name_ciphertext validation was removed since we now support variable length encrypted names
+            // Test creating directory without parent (orphaned directory)
+            switch (DiodeFileSystem.create_directory(fs, valid_id, valid_name, null)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "cannot create directory without parent - only root directory can have null parent" };
+            };
+
+            // Test creating directory with reserved root ID
+            switch (DiodeFileSystem.create_directory(fs, DiodeFileSystem.ROOT_DIRECTORY_ID, valid_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "cannot create directory with reserved root ID" };
+            };
+
+            // Test creating directory with non-existent parent
+            let non_existent_parent = make_blob(32, 999);
+            switch (DiodeFileSystem.create_directory(fs, valid_id, valid_name, ?non_existent_parent)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "parent directory not found" };
+            };
 
             // Test creating same directory twice
-            assert isOk(DiodeFileSystem.create_directory(fs, valid_id, valid_name, null));
-            switch (DiodeFileSystem.create_directory(fs, valid_id, valid_name, null)) {
+            assert isOk(DiodeFileSystem.create_directory(fs, valid_id, valid_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            switch (DiodeFileSystem.create_directory(fs, valid_id, valid_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID)) {
               case (#ok(_)) { assert false };
               case (#err(err)) { assert err == "directory already exists" };
             };
@@ -110,7 +140,7 @@ persistent actor {
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory first
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add file
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
@@ -153,7 +183,7 @@ persistent actor {
             let ciphertext2 = Blob.fromArray([4, 5, 6, 7]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add first file
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
@@ -195,7 +225,7 @@ persistent actor {
             let invalid_hash = make_blob(16, 2);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, valid_id, valid_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, valid_id, valid_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Test invalid directory_id size
             switch (DiodeFileSystem.add_file(fs, invalid_id, valid_hash, valid_hash, valid_ciphertext)) {
@@ -238,7 +268,7 @@ persistent actor {
             let ciphertext3 = Blob.fromArray(Array.tabulate<Nat8>(120, func i = Nat8.fromIntWrap(i + 100)));
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add first file (128 bytes)
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
@@ -312,7 +342,7 @@ persistent actor {
             let ciphertext2 = Blob.fromArray(Array.tabulate<Nat8>(120, func i = Nat8.fromIntWrap(i + 50)));
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add first file at position 0 (128 bytes)
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
@@ -355,7 +385,7 @@ persistent actor {
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add first file
             let result1 = DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash, ciphertext);
@@ -388,7 +418,7 @@ persistent actor {
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add file
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
@@ -419,7 +449,7 @@ persistent actor {
             let name_hash = make_blob(32, 2);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Get files in empty directory
             let files = DiodeFileSystem.get_files_in_directory(fs, directory_id);
@@ -436,18 +466,18 @@ persistent actor {
           func() : async () {
             let fs = DiodeFileSystem.new(1000);
 
-            // Initial state
+            // Initial state (with auto-created root directory)
             assert DiodeFileSystem.get_usage(fs) == 0;
             assert DiodeFileSystem.get_max_usage(fs) == 1000;
             assert DiodeFileSystem.get_file_count(fs) == 0;
-            assert DiodeFileSystem.get_directory_count(fs) == 0;
+            assert DiodeFileSystem.get_directory_count(fs) == 1; // Root directory auto-created
 
             // Create directory
             let directory_id = make_blob(32, 1);
             let name_hash = make_blob(32, 2);
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
-            assert DiodeFileSystem.get_directory_count(fs) == 1;
+            assert DiodeFileSystem.get_directory_count(fs) == 2; // Root + created directory
 
             // Add file
             let content_hash = make_blob(32, 3);
@@ -479,7 +509,7 @@ persistent actor {
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Allocate file
             switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 10)) {
@@ -549,7 +579,7 @@ persistent actor {
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
             // Create directory and add file normally
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
 
             // Read chunks
@@ -584,7 +614,7 @@ persistent actor {
             let content_hash = make_blob(32, 3);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Try to write chunk to non-existent file
             let chunk = Blob.fromArray([1, 2, 3]);
@@ -626,7 +656,7 @@ persistent actor {
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Use write_file (should allocate, write chunk, and finalize in one call)
             switch (DiodeFileSystem.write_file(fs, directory_id, name_hash, content_hash, ciphertext)) {
@@ -669,7 +699,7 @@ persistent actor {
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Allocate file
             switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5)) {
@@ -729,7 +759,7 @@ persistent actor {
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add file normally
             assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
@@ -788,7 +818,7 @@ persistent actor {
             let content_hash = make_blob(32, 3);
 
             // Create directory
-            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, null));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Allocate file but don't finalize
             switch (DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5)) {
@@ -825,6 +855,143 @@ persistent actor {
             // Directory should still be empty
             let files_after = DiodeFileSystem.get_files_in_directory(fs, directory_id);
             assert files_after.size() == 0;
+          },
+        );
+
+        await test(
+          "Should access root directory correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            
+            // Get root directory through different methods
+            let ?root1 = DiodeFileSystem.get_root_directory(fs);
+            let ?root2 = DiodeFileSystem.get_directory(fs, DiodeFileSystem.ROOT_DIRECTORY_ID);
+            
+            // Both should be the same
+            assert root1.id == root2.id;
+            assert root1.id == DiodeFileSystem.ROOT_DIRECTORY_ID;
+            assert root1.parent_id == null;
+            assert root1.child_directories.size() == 0;
+            assert root1.child_files.size() == 0;
+            
+            // Create a child directory and verify root is updated
+            let child_id = make_blob(32, 1);
+            let child_name = make_blob(32, 2);
+            assert isOk(DiodeFileSystem.create_directory(fs, child_id, child_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            
+            let ?updated_root = DiodeFileSystem.get_root_directory(fs);
+            assert updated_root.child_directories.size() == 1;
+            assert updated_root.child_directories[0] == child_id;
+          },
+        );
+
+        await test(
+          "Should prevent orphaned directories comprehensively",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name_hash = make_blob(32, 2);
+            
+            // Test 1: Cannot create directory with null parent
+            switch (DiodeFileSystem.create_directory(fs, directory_id, name_hash, null)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "cannot create directory without parent - only root directory can have null parent" };
+            };
+            
+            // Test 2: Cannot create directory with non-existent parent
+            let fake_parent = make_blob(32, 999);
+            switch (DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?fake_parent)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "parent directory not found" };
+            };
+            
+            // Test 3: Can create directory with valid parent (root)
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            
+            // Test 4: Can create directory with valid parent (another directory)
+            let child_id = make_blob(32, 3);
+            let child_name = make_blob(32, 4);
+            assert isOk(DiodeFileSystem.create_directory(fs, child_id, child_name, ?directory_id));
+            
+            // Verify the hierarchy
+            let ?root = DiodeFileSystem.get_root_directory(fs);
+            assert root.child_directories.size() == 1;
+            assert root.child_directories[0] == directory_id;
+            
+            let ?parent = DiodeFileSystem.get_directory(fs, directory_id);
+            assert parent.child_directories.size() == 1;
+            assert parent.child_directories[0] == child_id;
+            
+            let ?child = DiodeFileSystem.get_directory(fs, child_id);
+            assert child.parent_id == ?directory_id;
+          },
+        );
+
+        await test(
+          "Should enforce root directory uniqueness",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let name_hash = make_blob(32, 1);
+            
+            // Cannot create another directory with the root ID
+            switch (DiodeFileSystem.create_directory(fs, DiodeFileSystem.ROOT_DIRECTORY_ID, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "cannot create directory with reserved root ID" };
+            };
+            
+            // Root directory should still exist and be unchanged
+            let ?root = DiodeFileSystem.get_root_directory(fs);
+            assert root.id == DiodeFileSystem.ROOT_DIRECTORY_ID;
+            assert root.parent_id == null;
+            assert root.child_directories.size() == 0;
+          },
+        );
+
+        await test(
+          "Should handle complex directory hierarchy correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            
+            // Create a 3-level hierarchy: root -> level1 -> level2
+            let level1_id = make_blob(32, 1);
+            let level2_id = make_blob(32, 2);
+            let level1_name = make_blob(32, 3);
+            let level2_name = make_blob(32, 4);
+            
+            // Create level 1 under root
+            assert isOk(DiodeFileSystem.create_directory(fs, level1_id, level1_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            
+            // Create level 2 under level 1
+            assert isOk(DiodeFileSystem.create_directory(fs, level2_id, level2_name, ?level1_id));
+            
+            // Verify hierarchy
+            let ?root = DiodeFileSystem.get_root_directory(fs);
+            assert root.child_directories.size() == 1;
+            assert root.child_directories[0] == level1_id;
+            
+            let ?level1 = DiodeFileSystem.get_directory(fs, level1_id);
+            assert level1.parent_id == ?DiodeFileSystem.ROOT_DIRECTORY_ID;
+            assert level1.child_directories.size() == 1;
+            assert level1.child_directories[0] == level2_id;
+            
+            let ?level2 = DiodeFileSystem.get_directory(fs, level2_id);
+            assert level2.parent_id == ?level1_id;
+            assert level2.child_directories.size() == 0;
+            
+            // Test get_child_directories functionality
+            let root_children = DiodeFileSystem.get_child_directories(fs, DiodeFileSystem.ROOT_DIRECTORY_ID);
+            assert root_children.size() == 1;
+            assert root_children[0].id == level1_id;
+            
+            let level1_children = DiodeFileSystem.get_child_directories(fs, level1_id);
+            assert level1_children.size() == 1;
+            assert level1_children[0].id == level2_id;
+            
+            let level2_children = DiodeFileSystem.get_child_directories(fs, level2_id);
+            assert level2_children.size() == 0;
+            
+            // Verify directory count
+            assert DiodeFileSystem.get_directory_count(fs) == 3; // root + level1 + level2
           },
         );
       },

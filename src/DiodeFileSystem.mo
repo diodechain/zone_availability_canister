@@ -10,6 +10,9 @@ import Array "mo:base/Array";
 import Iter "mo:base/Iter";
 
 module DiodeFileSystem {
+  // Root directory has a fixed ID of 32 zero bytes
+  public let ROOT_DIRECTORY_ID : Blob = "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00";
+
   public type File = {
     id : Nat32;
     timestamp : Nat32;
@@ -46,18 +49,31 @@ module DiodeFileSystem {
   };
 
   public func new(max_storage : Nat64) : FileSystem {
-    return {
+    let fs = {
       var files = WriteableBand.new();
-      var file_index = 1;
+      var file_index = 1 : Nat32;
       var global_files = Map.new<Nat32, File>();
       var directories = Map.new<Blob, Directory>();
       var file_index_map = Map.new<Blob, Nat32>();
       var max_storage = max_storage;
-      var current_storage = 0;
-      var first_entry_offset = 0;
-      var end_offset = 0;
-      var next_entry_offset = null; // no entries to remove in empty filesystem
+      var current_storage = 0 : Nat64;
+      var first_entry_offset = 0 : Nat64;
+      var end_offset = 0 : Nat64;
+      var next_entry_offset = null : ?Nat64; // no entries to remove in empty filesystem
     };
+
+    // Create the root directory automatically
+    let root_directory : Directory = {
+      id = ROOT_DIRECTORY_ID;
+      name_ciphertext = ""; // Root has empty name
+      parent_id = null; // Root has no parent
+      timestamp = Nat32.fromNat(abs(now()) / 1_000_000_000);
+      child_directories = [];
+      child_files = [];
+    };
+    Map.set<Blob, Directory>(fs.directories, Map.bhash, ROOT_DIRECTORY_ID, root_directory);
+
+    return fs;
   };
 
   public func set_max_storage(fs : FileSystem, max_storage : Nat64) {
@@ -67,6 +83,29 @@ module DiodeFileSystem {
   public func create_directory(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, parent_id : ?Blob) : Result.Result<(), Text> {
     if (directory_id.size() != 32) {
       return #err("directory_id must be 32 bytes");
+    };
+
+    // Prevent creating directory with the reserved root ID
+    if (directory_id == ROOT_DIRECTORY_ID) {
+      return #err("cannot create directory with reserved root ID");
+    };
+
+    // Prevent creating orphaned directories - all directories except root must have a valid parent
+    switch (parent_id) {
+      case (null) {
+        return #err("cannot create directory without parent - only root directory can have null parent");
+      };
+      case (?parent) {
+        // Verify parent directory exists
+        switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, parent)) {
+          case (null) {
+            return #err("parent directory not found");
+          };
+          case (?_parent_dir) {
+            // Parent exists, continue
+          };
+        };
+      };
     };
 
     switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
@@ -89,26 +128,30 @@ module DiodeFileSystem {
 
     Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, directory);
 
-    // Add to parent's child_directories if parent exists
+    // Add to parent's child_directories (parent is guaranteed to exist due to earlier validation)
     switch (parent_id) {
-      case (null) {};
+      case (null) {
+        // This case should never happen due to earlier validation
+        return #err("internal error: null parent_id after validation");
+      };
       case (?parent) {
-        switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, parent)) {
+        let parent_dir = switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, parent)) {
           case (null) {
-            return #err("parent directory not found");
+            // This should never happen due to earlier validation
+            return #err("internal error: parent directory disappeared");
           };
-          case (?parent_dir) {
-            let updated_parent : Directory = {
-              id = parent_dir.id;
-              name_ciphertext = parent_dir.name_ciphertext;
-              parent_id = parent_dir.parent_id;
-              timestamp = parent_dir.timestamp;
-              child_directories = Array.append(parent_dir.child_directories, [directory_id]);
-              child_files = parent_dir.child_files;
-            };
-            Map.set<Blob, Directory>(fs.directories, Map.bhash, parent, updated_parent);
-          };
+          case (?dir) { dir };
         };
+        
+        let updated_parent : Directory = {
+          id = parent_dir.id;
+          name_ciphertext = parent_dir.name_ciphertext;
+          parent_id = parent_dir.parent_id;
+          timestamp = parent_dir.timestamp;
+          child_directories = Array.append(parent_dir.child_directories, [directory_id]);
+          child_files = parent_dir.child_files;
+        };
+        Map.set<Blob, Directory>(fs.directories, Map.bhash, parent, updated_parent);
       };
     };
 
@@ -552,6 +595,10 @@ module DiodeFileSystem {
 
   public func get_directory(fs : FileSystem, directory_id : Blob) : ?Directory {
     return Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id);
+  };
+
+  public func get_root_directory(fs : FileSystem) : ?Directory {
+    return Map.get<Blob, Directory>(fs.directories, Map.bhash, ROOT_DIRECTORY_ID);
   };
 
   public func get_files_in_directory(fs : FileSystem, directory_id : Blob) : [File] {
