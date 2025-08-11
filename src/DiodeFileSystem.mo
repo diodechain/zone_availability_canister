@@ -642,6 +642,10 @@ module DiodeFileSystem {
     };
   };
 
+  public func get_last_file_id(fs : FileSystem) : Nat32 {
+    return fs.file_index - 1;
+  };
+
   public func get_usage(fs : FileSystem) : Nat64 {
     return fs.current_storage;
   };

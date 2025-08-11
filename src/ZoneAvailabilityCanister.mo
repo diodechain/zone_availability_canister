@@ -352,6 +352,10 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.set_max_storage(file_system, max_storage);
   };
 
+  public query func get_last_file_id() : async Nat32 {
+    DiodeFileSystem.get_last_file_id(file_system);
+  };
+
   /**
    * Public System API
    */
@@ -374,7 +378,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    402;
+    403;
   };
 
   public query func get_stable_storage_size() : async Nat {
