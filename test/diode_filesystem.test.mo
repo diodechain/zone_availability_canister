@@ -93,13 +93,12 @@ persistent actor {
             let fs = DiodeFileSystem.new(1000);
             let valid_id = make_blob(32, 1);
             let valid_name = make_blob(32, 2);
-            let invalid_id = make_blob(16, 1);
-            let invalid_name = make_blob(16, 2);
+            let invalid_id = make_blob(6, 1);
 
             // Test invalid directory_id size
             switch (DiodeFileSystem.create_directory(fs, invalid_id, valid_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID)) {
               case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "directory_id must be 32 bytes" };
+              case (#err(err)) { assert err == "directory_id must be at least 8 bytes" };
             };
 
             // Test creating directory without parent (orphaned directory)
@@ -225,8 +224,8 @@ persistent actor {
             let valid_id = make_blob(32, 1);
             let valid_hash = make_blob(32, 2);
             let valid_ciphertext = Blob.fromArray([1, 2, 3]);
-            let invalid_id = make_blob(16, 1);
-            let invalid_hash = make_blob(16, 2);
+            let invalid_id = make_blob(4, 1);
+            let invalid_hash = make_blob(12, 2);
 
             // Create directory
             assert isOk(DiodeFileSystem.create_directory(fs, valid_id, valid_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
@@ -234,15 +233,13 @@ persistent actor {
             // Test invalid directory_id size
             switch (DiodeFileSystem.add_file(fs, invalid_id, valid_hash, valid_hash, valid_ciphertext)) {
               case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "directory_id must be 32 bytes" };
+              case (#err(err)) { assert err == "directory_id must be at least 8 bytes" };
             };
-
-            // Note: name_ciphertext validation was removed since we now support variable length encrypted names
 
             // Test invalid content_hash size
             switch (DiodeFileSystem.add_file(fs, valid_id, valid_hash, invalid_hash, valid_ciphertext)) {
               case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "content_hash must be 32 bytes" };
+              case (#err(err)) { assert err == "content_hash must be at least 16 bytes" };
             };
 
             // Test adding to non-existent directory

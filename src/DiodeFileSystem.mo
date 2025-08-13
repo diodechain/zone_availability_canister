@@ -82,8 +82,8 @@ module DiodeFileSystem {
   };
 
   public func create_directory(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, parent_id : ?Blob) : Result.Result<(), Text> {
-    if (directory_id.size() != 32) {
-      return #err("directory_id must be 32 bytes");
+    if (directory_id.size() < 8) {
+      return #err("directory_id must be at least 8 bytes");
     };
 
     // Prevent creating directory with the reserved root ID
@@ -160,11 +160,11 @@ module DiodeFileSystem {
   };
 
   public func add_file(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, ciphertext : Blob) : Result.Result<Nat32, Text> {
-    if (directory_id.size() != 32) {
-      return #err("directory_id must be 32 bytes");
+    if (directory_id.size() < 8) {
+      return #err("directory_id must be at least 8 bytes");
     };
-    if (content_hash.size() != 32) {
-      return #err("content_hash must be 32 bytes");
+    if (content_hash.size() < 16) {
+      return #err("content_hash must be at least 16 bytes");
     };
     // Check if file already exists
     switch (Map.get<Blob, Nat32>(fs.file_index_map, Map.bhash, content_hash)) {
@@ -334,11 +334,11 @@ module DiodeFileSystem {
   };
 
   public func allocate_file(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, size : Nat64) : Result.Result<Nat32, Text> {
-    if (directory_id.size() != 32) {
-      return #err("directory_id must be 32 bytes");
+    if (directory_id.size() < 8) {
+      return #err("directory_id must be at least 8 bytes");
     };
-    if (content_hash.size() != 32) {
-      return #err("content_hash must be 32 bytes");
+    if (content_hash.size() < 16) {
+      return #err("content_hash must be at least 16 bytes");
     };
     if (size == 0) {
       return #err("size must be greater than 0");
