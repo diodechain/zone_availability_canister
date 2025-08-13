@@ -10,7 +10,7 @@ persistent actor TestCanister {
     let (a, b) = record;
     a + b;
   };
-  
+
   public query func get_cycles_balance() : async Nat {
     Cycles.balance();
   };

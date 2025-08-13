@@ -1,4 +1,5 @@
 import Result "mo:base/Result";
+import Nat "mo:base/Nat";
 import Nat64 "mo:base/Nat64";
 import Nat32 "mo:base/Nat32";
 import { now } = "mo:base/Time";
@@ -17,7 +18,7 @@ module DiodeFileSystem {
     id : Nat32;
     timestamp : Nat32;
     directory_id : Blob;
-    name_ciphertext : Blob; // encrypted filename
+    metadata_ciphertext : Blob; // encrypted metadata (name, version_time, etc)
     content_hash : Blob;
     offset : Nat64; // offset to ciphertext in writeable band
     size : Nat64;
@@ -26,7 +27,7 @@ module DiodeFileSystem {
 
   public type Directory = {
     id : Blob;
-    name_ciphertext : Blob; // encrypted directory name
+    metadata_ciphertext : Blob; // encrypted metadata (name, version_time, etc)
     parent_id : ?Blob; // null for root
     timestamp : Nat32;
     child_directories : [Blob];
@@ -65,7 +66,7 @@ module DiodeFileSystem {
     // Create the root directory automatically
     let root_directory : Directory = {
       id = ROOT_DIRECTORY_ID;
-      name_ciphertext = ""; // Root has empty name
+      metadata_ciphertext = ""; // Root has empty metadata
       parent_id = null; // Root has no parent
       timestamp = Nat32.fromNat(abs(now()) / 1_000_000_000);
       child_directories = [];
@@ -119,7 +120,7 @@ module DiodeFileSystem {
 
     let directory : Directory = {
       id = directory_id;
-      name_ciphertext = name_ciphertext;
+      metadata_ciphertext = name_ciphertext;
       parent_id = parent_id;
       timestamp = Nat32.fromNat(abs(now()) / 1_000_000_000);
       child_directories = [];
@@ -142,10 +143,10 @@ module DiodeFileSystem {
           };
           case (?dir) { dir };
         };
-        
+
         let updated_parent : Directory = {
           id = parent_dir.id;
-          name_ciphertext = parent_dir.name_ciphertext;
+          metadata_ciphertext = parent_dir.metadata_ciphertext;
           parent_id = parent_dir.parent_id;
           timestamp = parent_dir.timestamp;
           child_directories = Array.append(parent_dir.child_directories, [directory_id]);
@@ -221,7 +222,7 @@ module DiodeFileSystem {
       id = fs.file_index;
       timestamp = Nat32.fromNat(abs(now()) / 1_000_000_000);
       directory_id = directory_id;
-      name_ciphertext = name_ciphertext;
+      metadata_ciphertext = name_ciphertext;
       content_hash = content_hash;
       offset = content_offset + 8; // offset to actual ciphertext (after length)
       size = file_size;
@@ -238,7 +239,7 @@ module DiodeFileSystem {
       case (?dir) {
         let updated_directory : Directory = {
           id = dir.id;
-          name_ciphertext = dir.name_ciphertext;
+          metadata_ciphertext = dir.metadata_ciphertext;
           parent_id = dir.parent_id;
           timestamp = dir.timestamp;
           child_directories = dir.child_directories;
@@ -247,8 +248,9 @@ module DiodeFileSystem {
         Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
       };
     };
+    let result_id = fs.file_index;
     fs.file_index += 1;
-    return #ok(fs.file_index - 1);
+    return #ok(result_id);
   };
 
   public func write_file(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, ciphertext : Blob) : Result.Result<Nat32, Text> {
@@ -304,7 +306,7 @@ module DiodeFileSystem {
           case (?dir) {
             let updated_directory : Directory = {
               id = dir.id;
-              name_ciphertext = dir.name_ciphertext;
+              metadata_ciphertext = dir.metadata_ciphertext;
               parent_id = dir.parent_id;
               timestamp = dir.timestamp;
               child_directories = dir.child_directories;
@@ -378,7 +380,7 @@ module DiodeFileSystem {
       id = fs.file_index;
       timestamp = Nat32.fromNat(abs(now()) / 1_000_000_000);
       directory_id = directory_id;
-      name_ciphertext = name_ciphertext;
+      metadata_ciphertext = name_ciphertext;
       content_hash = content_hash;
       offset = content_offset + 8; // offset to actual ciphertext (after length)
       size = size;
@@ -395,7 +397,7 @@ module DiodeFileSystem {
       case (?dir) {
         let updated_directory : Directory = {
           id = dir.id;
-          name_ciphertext = dir.name_ciphertext;
+          metadata_ciphertext = dir.metadata_ciphertext;
           parent_id = dir.parent_id;
           timestamp = dir.timestamp;
           child_directories = dir.child_directories;
@@ -460,7 +462,7 @@ module DiodeFileSystem {
           id = file.id;
           timestamp = file.timestamp;
           directory_id = file.directory_id;
-          name_ciphertext = file.name_ciphertext;
+          metadata_ciphertext = file.metadata_ciphertext;
           content_hash = file.content_hash;
           offset = file.offset;
           size = file.size;
@@ -546,7 +548,7 @@ module DiodeFileSystem {
               case (?dir) {
                 let updated_directory : Directory = {
                   id = dir.id;
-                  name_ciphertext = dir.name_ciphertext;
+                  metadata_ciphertext = dir.metadata_ciphertext;
                   parent_id = dir.parent_id;
                   timestamp = dir.timestamp;
                   child_directories = dir.child_directories;
@@ -643,7 +645,11 @@ module DiodeFileSystem {
   };
 
   public func get_last_file_id(fs : FileSystem) : Nat32 {
-    return fs.file_index - 1;
+    if (fs.file_index > 0) {
+      return fs.file_index - 1;
+    } else {
+      return 0;
+    };
   };
 
   public func get_usage(fs : FileSystem) : Nat64 {
