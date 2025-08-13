@@ -98,7 +98,9 @@ persistent actor {
             // Test invalid directory_id size
             switch (DiodeFileSystem.create_directory(fs, invalid_id, valid_name, ?DiodeFileSystem.ROOT_DIRECTORY_ID)) {
               case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "directory_id must be at least 8 bytes" };
+              case (#err(err)) {
+                assert err == "directory_id must be at least 8 bytes";
+              };
             };
 
             // Test creating directory without parent (orphaned directory)
@@ -146,7 +148,7 @@ persistent actor {
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
 
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
               case (#ok(file)) {
@@ -189,10 +191,10 @@ persistent actor {
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add first file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
 
             // Add second file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
 
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
               case (#ok(file1)) {
@@ -233,13 +235,17 @@ persistent actor {
             // Test invalid directory_id size
             switch (DiodeFileSystem.add_file(fs, invalid_id, valid_hash, valid_hash, valid_ciphertext)) {
               case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "directory_id must be at least 8 bytes" };
+              case (#err(err)) {
+                assert err == "directory_id must be at least 8 bytes";
+              };
             };
 
             // Test invalid content_hash size
             switch (DiodeFileSystem.add_file(fs, valid_id, valid_hash, invalid_hash, valid_ciphertext)) {
               case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "content_hash must be at least 16 bytes" };
+              case (#err(err)) {
+                assert err == "content_hash must be at least 16 bytes";
+              };
             };
 
             // Test adding to non-existent directory
@@ -272,7 +278,7 @@ persistent actor {
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add first file (128 bytes)
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
 
             // Verify first file exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -284,7 +290,7 @@ persistent actor {
             };
 
             // Add second file (128 bytes, total 256 bytes - should fit in 300 bytes)
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
 
             // Both files should exist
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -303,7 +309,7 @@ persistent actor {
 
             // Add third file (128 bytes, total would be 384 bytes > 300 bytes limit)
             // Should remove first file to make space
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash3, content_hash3, ciphertext3));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash3, content_hash3, ciphertext3));
 
             // First file should be removed (oldest file removed first)
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -346,7 +352,7 @@ persistent actor {
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add first file at position 0 (128 bytes)
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash1, ciphertext1));
 
             // Verify first file exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -357,7 +363,7 @@ persistent actor {
             };
 
             // Add second file - won't fit (128 + 128 = 256 > 140), should trigger removal of first file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash2, ciphertext2));
 
             // First file should be removed due to wrapping collision
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash1)) {
@@ -390,11 +396,11 @@ persistent actor {
 
             // Add first file
             let result1 = DiodeFileSystem.add_file(fs, directory_id, name_hash1, content_hash, ciphertext);
-            assert isOkNat32(result1);
+            assert isOkNat(result1);
 
             // Try to add same content with different name
             let result2 = DiodeFileSystem.add_file(fs, directory_id, name_hash2, content_hash, ciphertext);
-            assert isOkNat32(result2);
+            assert isOkNat(result2);
 
             // Should return the same file ID
             switch (result1, result2) {
@@ -422,7 +428,7 @@ persistent actor {
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add file
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
 
             // Get file by ID
             let ?file = DiodeFileSystem.get_file_by_id(fs, 1) else {
@@ -483,7 +489,7 @@ persistent actor {
             // Add file
             let content_hash = make_blob(32, 3);
             let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
 
             assert DiodeFileSystem.get_file_count(fs) == 1;
           },
@@ -581,7 +587,7 @@ persistent actor {
 
             // Create directory and add file normally
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
 
             // Read chunks
             switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
@@ -625,7 +631,7 @@ persistent actor {
             };
 
             // Allocate file
-            assert isOkNat32(DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5));
+            assert isOkNat(DiodeFileSystem.allocate_file(fs, directory_id, name_hash, content_hash, 5));
 
             // Try to write out of bounds chunk
             switch (DiodeFileSystem.write_file_chunk(fs, content_hash, 3, chunk)) {
@@ -763,7 +769,7 @@ persistent actor {
             assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name_hash, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
 
             // Add file normally
-            assert isOkNat32(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext));
 
             // Verify file exists
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
@@ -1015,7 +1021,7 @@ persistent actor {
     };
   };
 
-  private func isOkNat32(result : Result.Result<Nat32, Text>) : Bool {
+  private func isOkNat(result : Result.Result<Nat, Text>) : Bool {
     switch (result) {
       case (#ok(n)) {
         return true;

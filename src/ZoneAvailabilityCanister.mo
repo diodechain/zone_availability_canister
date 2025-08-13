@@ -264,13 +264,13 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.create_directory(file_system, directory_id, name_hash, parent_id);
   };
 
-  public shared (msg) func add_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
+  public shared (msg) func add_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat, Text> {
     assert_membership(msg.caller);
     ignore await request_topup_if_low();
     DiodeFileSystem.add_file(file_system, directory_id, name_hash, content_hash, ciphertext);
   };
 
-  public shared (msg) func write_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
+  public shared (msg) func write_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat, Text> {
     assert_membership(msg.caller);
     ignore await request_topup_if_low();
     DiodeFileSystem.write_file(file_system, directory_id, name_hash, content_hash, ciphertext);
@@ -282,7 +282,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.delete_file(file_system, content_hash);
   };
 
-  public shared (msg) func allocate_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, size : Nat64) : async Result.Result<Nat32, Text> {
+  public shared (msg) func allocate_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, size : Nat64) : async Result.Result<Nat, Text> {
     assert_membership(msg.caller);
     ignore await request_topup_if_low();
     DiodeFileSystem.allocate_file(file_system, directory_id, name_hash, content_hash, size);
@@ -310,7 +310,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.get_file_by_hash(file_system, content_hash);
   };
 
-  public query (msg) func get_file_by_id(file_id : Nat32) : async ?DiodeFileSystem.File {
+  public query (msg) func get_file_by_id(file_id : Nat) : async ?DiodeFileSystem.File {
     assert_membership(msg.caller);
     DiodeFileSystem.get_file_by_id(file_system, file_id);
   };
@@ -352,7 +352,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.set_max_storage(file_system, max_storage);
   };
 
-  public query func get_last_file_id() : async Nat32 {
+  public query func get_last_file_id() : async Nat {
     DiodeFileSystem.get_last_file_id(file_system);
   };
 
@@ -378,7 +378,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    405;
+    406;
   };
 
   public query func get_stable_storage_size() : async Nat {
