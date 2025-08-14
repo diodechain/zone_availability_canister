@@ -169,7 +169,35 @@ module DiodeFileSystem {
     // Check if file already exists
     switch (Map.get<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash)) {
       case (null) { /* passthrough */ };
-      case (?value) { return #ok(value) };
+      case (?existing_file_id) { 
+        // File content already exists, but check if it's in the target directory
+        switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
+          case (null) { return #err("directory not found") };
+          case (?dir) {
+            // Check if the file is already in this directory
+            let file_already_in_dir = Array.find<Nat>(dir.child_files, func(fid : Nat) : Bool { fid == existing_file_id });
+            switch (file_already_in_dir) {
+              case (?_) { 
+                // File is already in this directory, just return the ID
+                return #ok(existing_file_id);
+              };
+              case (null) {
+                // File exists but not in this directory, add it to the directory
+                let updated_directory : Directory = {
+                  id = dir.id;
+                  metadata_ciphertext = dir.metadata_ciphertext;
+                  parent_id = dir.parent_id;
+                  timestamp = dir.timestamp;
+                  child_directories = dir.child_directories;
+                  child_files = Array.append(dir.child_files, [existing_file_id]);
+                };
+                Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
+                return #ok(existing_file_id);
+              };
+            };
+          };
+        };
+      };
     };
     // Check if directory exists
     switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
@@ -292,29 +320,12 @@ module DiodeFileSystem {
           case (?f) { f };
         };
 
-        let directory_id = file.directory_id;
-
         // Remove from file index maps
         Map.delete<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash);
         Map.delete<Nat, File>(fs.global_files, Map.nhash, file_id);
 
-        // Remove from directory's child_files array
-        switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
-          case (null) {
-            return #err("directory not found during delete");
-          };
-          case (?dir) {
-            let updated_directory : Directory = {
-              id = dir.id;
-              metadata_ciphertext = dir.metadata_ciphertext;
-              parent_id = dir.parent_id;
-              timestamp = dir.timestamp;
-              child_directories = dir.child_directories;
-              child_files = Array.filter<Nat>(dir.child_files, func(fid : Nat) : Bool { fid != file_id });
-            };
-            Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
-          };
-        };
+        // Remove from ALL directories that reference this file
+        remove_file_from_all_directories(fs, file_id);
 
         // Mark entry as deleted by setting length to 0
         let length_offset = file.offset - 8; // length is stored 8 bytes before ciphertext
@@ -514,6 +525,31 @@ module DiodeFileSystem {
     };
   };
 
+  private func remove_file_from_all_directories(fs : FileSystem, file_id : Nat) {
+    // Scan all directories and remove this file_id from any that reference it
+    for ((dir_id, directory) in Map.entries(fs.directories)) {
+      // Check if this directory contains the file_id
+      let file_found = Array.find<Nat>(directory.child_files, func(fid : Nat) : Bool { fid == file_id });
+      switch (file_found) {
+        case (?_) {
+          // Directory contains this file, remove it
+          let updated_directory : Directory = {
+            id = directory.id;
+            metadata_ciphertext = directory.metadata_ciphertext;
+            parent_id = directory.parent_id;
+            timestamp = directory.timestamp;
+            child_directories = directory.child_directories;
+            child_files = Array.filter<Nat>(directory.child_files, func(fid : Nat) : Bool { fid != file_id });
+          };
+          Map.set<Blob, Directory>(fs.directories, Map.bhash, dir_id, updated_directory);
+        };
+        case (null) {
+          // Directory doesn't contain this file, skip
+        };
+      };
+    };
+  };
+
   private func remove_next_file_entry(fs : FileSystem) {
     switch (fs.next_entry_offset) {
       case (null) { return };
@@ -536,27 +572,13 @@ module DiodeFileSystem {
           case (?file) {
             let file_id = file.id;
             let content_hash = file.content_hash;
-            let directory_id = file.directory_id;
 
             // Remove from file index and global files map
             Map.delete<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash);
             Map.delete<Nat, File>(fs.global_files, Map.nhash, file_id);
 
-            // Update directory file entries
-            switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
-              case (null) {};
-              case (?dir) {
-                let updated_directory : Directory = {
-                  id = dir.id;
-                  metadata_ciphertext = dir.metadata_ciphertext;
-                  parent_id = dir.parent_id;
-                  timestamp = dir.timestamp;
-                  child_directories = dir.child_directories;
-                  child_files = Array.filter<Nat>(dir.child_files, func(fid : Nat) : Bool { fid != file_id });
-                };
-                Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
-              };
-            };
+            // Remove from ALL directories that reference this file
+            remove_file_from_all_directories(fs, file_id);
             // Update current storage
             let total_file_size = size + file_entry_size;
             if (fs.current_storage >= total_file_size) {
