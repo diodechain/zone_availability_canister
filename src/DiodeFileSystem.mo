@@ -169,7 +169,35 @@ module DiodeFileSystem {
     // Check if file already exists
     switch (Map.get<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash)) {
       case (null) { /* passthrough */ };
-      case (?value) { return #ok(value) };
+      case (?existing_file_id) { 
+        // File content already exists, but check if it's in the target directory
+        switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
+          case (null) { return #err("directory not found") };
+          case (?dir) {
+            // Check if the file is already in this directory
+            let file_already_in_dir = Array.find<Nat>(dir.child_files, func(fid : Nat) : Bool { fid == existing_file_id });
+            switch (file_already_in_dir) {
+              case (?_) { 
+                // File is already in this directory, just return the ID
+                return #ok(existing_file_id);
+              };
+              case (null) {
+                // File exists but not in this directory, add it to the directory
+                let updated_directory : Directory = {
+                  id = dir.id;
+                  metadata_ciphertext = dir.metadata_ciphertext;
+                  parent_id = dir.parent_id;
+                  timestamp = dir.timestamp;
+                  child_directories = dir.child_directories;
+                  child_files = Array.append(dir.child_files, [existing_file_id]);
+                };
+                Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
+                return #ok(existing_file_id);
+              };
+            };
+          };
+        };
+      };
     };
     // Check if directory exists
     switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {

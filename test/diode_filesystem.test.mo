@@ -1005,6 +1005,50 @@ persistent actor {
             assert DiodeFileSystem.get_directory_count(fs) == 3; // root + level1 + level2
           },
         );
+
+        await test(
+          "Should handle duplicate content in different directories correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory1_id = make_blob(32, 1);
+            let directory2_id = make_blob(32, 2);
+            let name1 = make_blob(32, 3);
+            let name2 = make_blob(32, 4);
+            let content_hash = make_blob(32, 5); // Same content hash for both files
+            let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
+
+            // Create two directories
+            assert isOk(DiodeFileSystem.create_directory(fs, directory1_id, name1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory2_id, name2, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+
+            // Add file with same content to first directory
+            let result1 = DiodeFileSystem.add_file(fs, directory1_id, name1, content_hash, ciphertext);
+            assert isOkNat(result1);
+
+            // Add file with same content but different name to second directory
+            let result2 = DiodeFileSystem.add_file(fs, directory2_id, name2, content_hash, ciphertext);
+            assert isOkNat(result2);
+
+            // Both directories should contain their respective files
+            let files1 = DiodeFileSystem.get_files_in_directory(fs, directory1_id);
+            let files2 = DiodeFileSystem.get_files_in_directory(fs, directory2_id);
+
+            // This test should reveal the bug: directory2 will be empty because
+            // the second add_file call returns early without updating directory2's child_files
+            Debug.print("Files in directory1: " # Nat.toText(files1.size()));
+            Debug.print("Files in directory2: " # Nat.toText(files2.size()));
+            
+            // Both directories should show they contain the file
+            assert files1.size() == 1;
+            assert files2.size() == 1; // This will fail, revealing the bug
+
+            // Both should reference the same underlying file (content deduplication)
+            assert files1[0].content_hash == content_hash;
+            // Note: The current implementation reuses the same file record,
+            // so they will have the same metadata from the first file
+            // This test will fail because files2 will be empty (size 0)
+          },
+        );
       },
     );
   };
