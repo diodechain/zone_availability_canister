@@ -79,7 +79,7 @@ persistent actor CanisterFactory {
   ) : async Principal {
 
     // 1 trillion cycles is ~ 1.30 USD
-    let canister = await (with cycles = 1_000_000_000_000) ZoneAvailabilityCanister.ZoneAvailabilityCanister({
+    let canister = await (with cycles = 1_500_000_000_000) ZoneAvailabilityCanister.ZoneAvailabilityCanister({
       zone_id;
       rpc_host;
       rpc_path;
@@ -175,7 +175,7 @@ persistent actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    104;
+    105;
   };
 
   public shared func get_stable_size() : async Nat32 {
