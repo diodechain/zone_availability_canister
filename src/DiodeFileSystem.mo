@@ -178,7 +178,7 @@ module DiodeFileSystem {
     };
     let file_size = Nat64.fromNat(ciphertext.size());
     let total_size = file_size + file_entry_size;
-    ensureRingBufferSpace(fs, total_size);
+    ensure_ring_buffer_space(fs, total_size);
     // Entry will not fit in the current space, wrap around to the beginning
     if (fs.end_offset + total_size > fs.max_storage) {
       fs.end_offset := 0;
@@ -357,7 +357,7 @@ module DiodeFileSystem {
     };
 
     let total_size = size + file_entry_size;
-    ensureRingBufferSpace(fs, total_size);
+    ensure_ring_buffer_space(fs, total_size);
 
     // Wrap if needed
     if (fs.end_offset + total_size > fs.max_storage) {
@@ -504,7 +504,7 @@ module DiodeFileSystem {
     };
   };
 
-  private func ensureRingBufferSpace(fs : FileSystem, total_size : Nat64) {
+  private func ensure_ring_buffer_space(fs : FileSystem, total_size : Nat64) {
     // Remove files if we exceed storage capacity
     while (fs.current_storage + total_size > fs.max_storage) {
       if (fs.next_entry_offset == null) return; // No more files to remove
