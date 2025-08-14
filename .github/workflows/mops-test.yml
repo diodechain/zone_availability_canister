@@ -18,4 +18,5 @@ jobs:
       - name: install deps and run tests
         run: |
           . ./install_deps.sh
+          mops format --check
           ./run_tests.sh
