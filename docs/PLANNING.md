@@ -1,5 +1,4 @@
 # Diode Collab: Secure File Sharing with vetKEY Integration
-*Grant Size: 50,000 USD*
 
 ## Project Overview
 
