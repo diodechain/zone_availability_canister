@@ -43,7 +43,52 @@ graph TD
     GLM --> DS
 ```
 
-# Encryption
+## Peer-to-peer and Canister
+
+Peers connect by default to each other, but the Canister serves as always-on availability peer. Using the Canister has higher convienence but comes as an increased cost factor for certain operations, specifically vetKey derivation and large file storage. So depending on the peer availability data and keys will be fetched from peers before falling back to the canister.
+
+```mermaid
+graph TD
+    subgraph "Peer Network"
+        P1["Peer 1"]
+        P2["Peer 2"]
+        P3["Peer 3"]
+        P4["Peer 4"]
+        P5["Peer 5"]
+        P6["Peer 6"]
+    end
+    
+    C["Canister<br/>(Fallback)"]
+    
+    %% Peer-to-peer connections (primary)
+    P1 -.-> P2
+    P2 -.-> P3
+    P3 -.-> P4
+    P4 -.-> P5
+    P5 -.-> P6
+    P6 -.-> P1
+    
+    %% Cross connections between peers
+    P1 -.-> P4
+    P2 -.-> P5
+    P3 -.-> P6
+    
+    %% Fallback connections to canister (when peers offline)
+    P1 --> C
+    P2 --> C
+    P3 --> C
+    P4 --> C
+    P5 --> C
+    P6 --> C
+    
+    %% Styling
+    classDef peerClass fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef canisterClass fill:#fff3e0,stroke:#ef6c00,stroke-width:3px
+    
+    class P1,P2,P3,P4,P5,P6 peerClass
+    class C canisterClass
+```
+## Encryption
 
 As MS1 a vetKey protected secret is used to encrypt a Secp256k1 private key. The private keys are created off-chain and can also be exchanged securely peer-to-peer when peers are available. When no peer is available/online the vetKey derivation can be used to recover the private key.
 
@@ -56,11 +101,11 @@ All file contents as well as metadata is encrypted using the `BitMessage` asymme
 - Directory name
 - File content
 
-### Listing and Tracking
+## Listing and Tracking
 
 The FileSystem API allows both to exploratively list folders and their contents using a `get_directory` method as well tracking most recent changes using the `get_last_file_id`. This allows clients to easily stay in sync if they want to copy all files, or selectively only sync needed files.
 
-### Access Control
+## Access Control
 
 Folders can be protected and shared only with certain members in a Zone. This is implemented using multiple canisters with different sets of members. Member access is checked using Chain Fusion calls to another EVM based chain. When a new private area is created - sharing a different set of members, also a new Canister is spawned isolating both access lists as well as actual storage and storage limits.
 
