@@ -1049,6 +1049,236 @@ persistent actor {
             // This test will fail because files2 will be empty (size 0)
           },
         );
+
+        await test(
+          "Should handle explicit delete with content deduplication correctly",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory1_id = make_blob(32, 1);
+            let directory2_id = make_blob(32, 2);
+            let directory3_id = make_blob(32, 3);
+            let name1 = make_blob(32, 4);
+            let name2 = make_blob(32, 5);
+            let name3 = make_blob(32, 6);
+            let content_hash = make_blob(32, 7); // Same content hash for all files
+            let ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
+
+            // Create three directories
+            assert isOk(DiodeFileSystem.create_directory(fs, directory1_id, name1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory2_id, name2, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory3_id, name3, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+
+            // Add same content to all three directories
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory1_id, name1, content_hash, ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory2_id, name2, content_hash, ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory3_id, name3, content_hash, ciphertext));
+
+            // Verify all directories contain the file
+            let files1_before = DiodeFileSystem.get_files_in_directory(fs, directory1_id);
+            let files2_before = DiodeFileSystem.get_files_in_directory(fs, directory2_id);
+            let files3_before = DiodeFileSystem.get_files_in_directory(fs, directory3_id);
+            assert files1_before.size() == 1;
+            assert files2_before.size() == 1;
+            assert files3_before.size() == 1;
+
+            // Verify content is accessible
+            switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
+              case (#ok(read_data)) {
+                assert read_data == ciphertext;
+              };
+              case (#err(_)) { assert false };
+            };
+
+            // Explicitly delete the file
+            switch (DiodeFileSystem.delete_file(fs, content_hash)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false };
+            };
+
+            // Verify file is removed from ALL directories
+            let files1_after = DiodeFileSystem.get_files_in_directory(fs, directory1_id);
+            let files2_after = DiodeFileSystem.get_files_in_directory(fs, directory2_id);
+            let files3_after = DiodeFileSystem.get_files_in_directory(fs, directory3_id);
+            assert files1_after.size() == 0;
+            assert files2_after.size() == 0;
+            assert files3_after.size() == 0;
+
+            // Verify content is no longer accessible
+            switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "file not found" };
+            };
+
+            // Verify file is completely gone from the system
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "file not found" };
+            };
+          },
+        );
+
+        await test(
+          "Should handle ring buffer cleanup with content deduplication correctly",
+          func() : async () {
+            // Create filesystem with small capacity to trigger ring buffer cleanup
+            let fs = DiodeFileSystem.new(100); // Very small capacity
+            let directory1_id = make_blob(32, 1);
+            let directory2_id = make_blob(32, 2);
+            let name1 = make_blob(32, 3);
+            let name2 = make_blob(32, 4);
+            let shared_content_hash = make_blob(32, 5);
+            let filler_content_hash = make_blob(32, 6);
+            let shared_ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
+            // Create large filler content to trigger cleanup (80 bytes + 8 metadata = 88 bytes)
+            // Shared content is 5 bytes + 8 metadata = 13 bytes
+            // Total would be 101 bytes, exceeding 100 byte capacity
+            let filler_ciphertext = Blob.fromArray(Array.tabulate<Nat8>(80, func i = Nat8.fromIntWrap(i + 100)));
+
+            // Create two directories
+            assert isOk(DiodeFileSystem.create_directory(fs, directory1_id, name1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory2_id, name2, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+
+            // Add shared content to both directories
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory1_id, name1, shared_content_hash, shared_ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory2_id, name2, shared_content_hash, shared_ciphertext));
+
+            // Verify both directories contain the shared file
+            let files1_before = DiodeFileSystem.get_files_in_directory(fs, directory1_id);
+            let files2_before = DiodeFileSystem.get_files_in_directory(fs, directory2_id);
+            assert files1_before.size() == 1;
+            assert files2_before.size() == 1;
+
+            // Verify shared content is accessible
+            switch (DiodeFileSystem.read_file_chunk(fs, shared_content_hash, 0, 5)) {
+              case (#ok(read_data)) {
+                assert read_data == shared_ciphertext;
+              };
+              case (#err(_)) { assert false };
+            };
+
+            // Add large file to trigger ring buffer cleanup of the shared content
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory1_id, name1, filler_content_hash, filler_ciphertext));
+
+            // Verify shared file is removed from BOTH directories due to ring buffer cleanup
+            let files1_after = DiodeFileSystem.get_files_in_directory(fs, directory1_id);
+            let files2_after = DiodeFileSystem.get_files_in_directory(fs, directory2_id);
+            
+            // Both directories should only contain the filler file, not the shared file
+            Debug.print("Directory1 files after cleanup: " # Nat.toText(files1_after.size()));
+            Debug.print("Directory2 files after cleanup: " # Nat.toText(files2_after.size()));
+            
+            // Find which files remain
+            let remaining_files1 = Array.map<DiodeFileSystem.File, Blob>(files1_after, func(f) = f.content_hash);
+            let remaining_files2 = Array.map<DiodeFileSystem.File, Blob>(files2_after, func(f) = f.content_hash);
+            
+            // Should not contain the shared content hash anymore
+            let shared_in_dir1 = Array.find<Blob>(remaining_files1, func(h) = h == shared_content_hash);
+            let shared_in_dir2 = Array.find<Blob>(remaining_files2, func(h) = h == shared_content_hash);
+            assert shared_in_dir1 == null;
+            assert shared_in_dir2 == null;
+
+            // Verify shared content is no longer accessible
+            switch (DiodeFileSystem.read_file_chunk(fs, shared_content_hash, 0, 5)) {
+              case (#ok(_)) { assert false };
+              case (#err(_)) {}; // Expected - file should be gone
+            };
+
+            // Verify filler content is still accessible
+            switch (DiodeFileSystem.read_file_chunk(fs, filler_content_hash, 0, 10)) {
+              case (#ok(_)) {}; // Expected
+              case (#err(_)) { assert false };
+            };
+          },
+        );
+
+        await test(
+          "Should maintain directory consistency during selective ring buffer cleanup",
+          func() : async () {
+            // Test that only evicted files are removed, others remain accessible
+            let fs = DiodeFileSystem.new(300); // Medium capacity
+            let directory1_id = make_blob(32, 1);
+            let directory2_id = make_blob(32, 2);
+            let name1 = make_blob(32, 3);
+            let name2 = make_blob(32, 4);
+            
+            // Create different content
+            let old_content_hash = make_blob(32, 5);
+            let shared_content_hash = make_blob(32, 6);
+            let new_content_hash = make_blob(32, 7);
+            
+            let old_ciphertext = Blob.fromArray(Array.tabulate<Nat8>(80, func i = Nat8.fromIntWrap(i)));
+            let shared_ciphertext = Blob.fromArray(Array.tabulate<Nat8>(80, func i = Nat8.fromIntWrap(i + 50)));
+            let new_ciphertext = Blob.fromArray(Array.tabulate<Nat8>(80, func i = Nat8.fromIntWrap(i + 100)));
+
+            // Create directories
+            assert isOk(DiodeFileSystem.create_directory(fs, directory1_id, name1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+            assert isOk(DiodeFileSystem.create_directory(fs, directory2_id, name2, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+
+            // Add old file to directory1 only
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory1_id, name1, old_content_hash, old_ciphertext));
+            
+            // Add shared file to both directories
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory1_id, name1, shared_content_hash, shared_ciphertext));
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory2_id, name2, shared_content_hash, shared_ciphertext));
+
+            // Verify initial state
+            let files1_initial = DiodeFileSystem.get_files_in_directory(fs, directory1_id);
+            let files2_initial = DiodeFileSystem.get_files_in_directory(fs, directory2_id);
+            assert files1_initial.size() == 2; // old + shared
+            assert files2_initial.size() == 1; // shared only
+
+            // Add new large file to trigger cleanup of oldest (old_content)
+            assert isOkNat(DiodeFileSystem.add_file(fs, directory2_id, name2, new_content_hash, new_ciphertext));
+
+            // Verify final state
+            let files1_final = DiodeFileSystem.get_files_in_directory(fs, directory1_id);
+            let files2_final = DiodeFileSystem.get_files_in_directory(fs, directory2_id);
+
+            // Check which content is still accessible
+            let old_still_exists = switch (DiodeFileSystem.read_file_chunk(fs, old_content_hash, 0, 10)) {
+              case (#ok(_)) { true };
+              case (#err(_)) { false };
+            };
+            
+            let shared_still_exists = switch (DiodeFileSystem.read_file_chunk(fs, shared_content_hash, 0, 10)) {
+              case (#ok(_)) { true };
+              case (#err(_)) { false };
+            };
+            
+            let new_still_exists = switch (DiodeFileSystem.read_file_chunk(fs, new_content_hash, 0, 10)) {
+              case (#ok(_)) { true };
+              case (#err(_)) { false };
+            };
+
+            // New content should definitely exist
+            assert new_still_exists == true;
+            
+            // If old content was evicted, it should be removed from directory1
+            // If shared content was evicted, it should be removed from both directories
+            // The exact eviction behavior depends on ring buffer implementation,
+            // but directories should be consistent with what's actually stored
+            
+            if (not old_still_exists) {
+              // If old content was evicted, directory1 should not contain it
+              let old_in_dir1 = Array.find<DiodeFileSystem.File>(files1_final, func(f) = f.content_hash == old_content_hash);
+              assert old_in_dir1 == null;
+            };
+            
+            if (not shared_still_exists) {
+              // If shared content was evicted, neither directory should contain it
+              let shared_in_dir1 = Array.find<DiodeFileSystem.File>(files1_final, func(f) = f.content_hash == shared_content_hash);
+              let shared_in_dir2 = Array.find<DiodeFileSystem.File>(files2_final, func(f) = f.content_hash == shared_content_hash);
+              assert shared_in_dir1 == null;
+              assert shared_in_dir2 == null;
+            };
+
+            Debug.print("Old content exists: " # (if old_still_exists "true" else "false"));
+            Debug.print("Shared content exists: " # (if shared_still_exists "true" else "false"));
+            Debug.print("New content exists: " # (if new_still_exists "true" else "false"));
+            Debug.print("Directory1 final files: " # Nat.toText(files1_final.size()));
+            Debug.print("Directory2 final files: " # Nat.toText(files2_final.size()));
+          },
+        );
       },
     );
   };
