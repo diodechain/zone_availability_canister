@@ -264,12 +264,6 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.create_directory(file_system, directory_id, name_hash, parent_id);
   };
 
-  public shared (msg) func add_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat, Text> {
-    assert_membership(msg.caller);
-    ignore await request_topup_if_low();
-    DiodeFileSystem.add_file(file_system, directory_id, name_hash, content_hash, ciphertext);
-  };
-
   public shared (msg) func write_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat, Text> {
     assert_membership(msg.caller);
     ignore await request_topup_if_low();

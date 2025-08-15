@@ -29,7 +29,7 @@ actor {
             Debug.print("Directory result: " # debug_show (dir_result));
 
             Debug.print("=== STEP 2: Add file ===");
-            let add_result = DiodeFileSystem.add_file(fs, directory_id, name_hash, content_hash, ciphertext);
+            let add_result = DiodeFileSystem.write_file(fs, directory_id, name_hash, content_hash, ciphertext);
             Debug.print("Add result: " # debug_show (add_result));
 
             Debug.print("=== STEP 3: Check file count ===");

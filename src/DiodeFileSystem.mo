@@ -159,119 +159,31 @@ module DiodeFileSystem {
     return #ok();
   };
 
-  public func add_file(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, ciphertext : Blob) : Result.Result<Nat, Text> {
-    if (directory_id.size() < 8) {
-      return #err("directory_id must be at least 8 bytes");
-    };
-    if (content_hash.size() < 16) {
-      return #err("content_hash must be at least 16 bytes");
-    };
-    // Check if file already exists
-    switch (Map.get<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash)) {
-      case (null) { /* passthrough */ };
-      case (?value) { return #ok(value) };
-    };
-    // Check if directory exists
-    switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
-      case (null) { return #err("directory not found") };
-      case (?_directory) { /* passthrough */ };
-    };
-    let file_size = Nat64.fromNat(ciphertext.size());
-    let total_size = file_size + file_entry_size;
-    ensure_ring_buffer_space(fs, total_size);
-    // Entry will not fit in the current space, wrap around to the beginning
-    if (fs.end_offset + total_size > fs.max_storage) {
-      fs.end_offset := 0;
-
-      // When wrapping, remove files that would be overwritten
-      let new_file_end = fs.end_offset + total_size;
-      label removal_loop while (fs.next_entry_offset != null) {
-        let entry_offset = switch (fs.next_entry_offset) {
-          case (?offset) { offset };
-          case null { break removal_loop };
-        };
-
-        // If this entry or its content would be overwritten by the new file, remove it
-        // The content starts before the entry, and the entry ends at entry_offset + file_entry_size
-        if (entry_offset < new_file_end) {
-          // This entry will be overwritten, remove the file
-          remove_next_file_entry(fs);
-        } else {
-          break removal_loop; // No more overlapping files
-        };
-      };
-    };
-
-    // Write file length and content
-    let content_offset = fs.end_offset;
-    WriteableBand.writeNat64(fs.files, content_offset, file_size); // store length first
-    WriteableBand.writeBlob(fs.files, content_offset + 8, ciphertext); // then ciphertext
-    fs.end_offset += total_size;
-    fs.current_storage += total_size;
-
-    // Set next_entry_offset to point to the first entry when adding the first file
-    if (fs.next_entry_offset == null) {
-      fs.next_entry_offset := ?content_offset;
-    };
-
-    // Update file index
-    Map.set<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash, fs.file_index);
-
-    // Create File struct
-    let file : File = {
-      id = fs.file_index;
-      timestamp = abs(now()) / 1_000_000_000;
-      directory_id = directory_id;
-      metadata_ciphertext = name_ciphertext;
-      content_hash = content_hash;
-      offset = content_offset + 8; // offset to actual ciphertext (after length)
-      size = file_size;
-      finalized = true;
-    };
-
-    // Store in global files map
-    Map.set<Nat, File>(fs.global_files, Map.nhash, fs.file_index, file);
-
-    // Update directory's child_files
-    let directory = Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id);
-    switch (directory) {
-      case (null) { return #err("directory not found during update") };
-      case (?dir) {
-        let updated_directory : Directory = {
-          id = dir.id;
-          metadata_ciphertext = dir.metadata_ciphertext;
-          parent_id = dir.parent_id;
-          timestamp = dir.timestamp;
-          child_directories = dir.child_directories;
-          child_files = Array.append(dir.child_files, [fs.file_index]);
-        };
-        Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
-      };
-    };
-    let result_id = fs.file_index;
-    fs.file_index += 1;
-    return #ok(result_id);
-  };
-
   public func write_file(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, ciphertext : Blob) : Result.Result<Nat, Text> {
     switch (allocate_file(fs, directory_id, name_ciphertext, content_hash, Nat64.fromNat(ciphertext.size()))) {
       case (#err(err)) {
         return #err(err);
       };
-      case (#ok(file_id)) {
-        switch (write_file_chunk(fs, content_hash, 0, ciphertext)) {
-          case (#err(err)) {
-            let _ = delete_file(fs, content_hash);
-            return #err(err);
-          };
-          case (#ok()) {
-            switch (finalize_file(fs, content_hash)) {
-              case (#err(err)) {
-                let _ = delete_file(fs, content_hash);
-                return #err(err);
-              };
-              case (#ok()) {
-                return #ok(file_id);
+      case (#ok(file)) {
+        if (file.finalized) {
+          // File already exists and is finalized (deduplication case)
+          return #ok(file.id);
+        } else {
+          // File is new and needs to be written and finalized
+          switch (write_file_chunk(fs, content_hash, 0, ciphertext)) {
+            case (#err(err)) {
+              let _ = delete_file(fs, content_hash);
+              return #err(err);
+            };
+            case (#ok()) {
+              switch (finalize_file(fs, content_hash)) {
+                case (#err(err)) {
+                  let _ = delete_file(fs, content_hash);
+                  return #err(err);
+                };
+                case (#ok()) {
+                  return #ok(file.id);
+                };
               };
             };
           };
@@ -292,29 +204,12 @@ module DiodeFileSystem {
           case (?f) { f };
         };
 
-        let directory_id = file.directory_id;
-
         // Remove from file index maps
         Map.delete<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash);
         Map.delete<Nat, File>(fs.global_files, Map.nhash, file_id);
 
-        // Remove from directory's child_files array
-        switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
-          case (null) {
-            return #err("directory not found during delete");
-          };
-          case (?dir) {
-            let updated_directory : Directory = {
-              id = dir.id;
-              metadata_ciphertext = dir.metadata_ciphertext;
-              parent_id = dir.parent_id;
-              timestamp = dir.timestamp;
-              child_directories = dir.child_directories;
-              child_files = Array.filter<Nat>(dir.child_files, func(fid : Nat) : Bool { fid != file_id });
-            };
-            Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
-          };
-        };
+        // Remove from ALL directories that reference this file
+        remove_file_from_all_directories(fs, file_id);
 
         // Mark entry as deleted by setting length to 0
         let length_offset = file.offset - 8; // length is stored 8 bytes before ciphertext
@@ -333,7 +228,7 @@ module DiodeFileSystem {
     };
   };
 
-  public func allocate_file(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, size : Nat64) : Result.Result<Nat, Text> {
+  public func allocate_file(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, size : Nat64) : Result.Result<File, Text> {
     if (directory_id.size() < 8) {
       return #err("directory_id must be at least 8 bytes");
     };
@@ -344,16 +239,35 @@ module DiodeFileSystem {
       return #err("size must be greater than 0");
     };
 
-    // Check if file already exists
-    switch (Map.get<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash)) {
-      case (null) { /* passthrough */ };
-      case (?value) { return #ok(value) };
+    // Check if directory exists
+    let dir = switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
+      case (null) { return #err("directory not found") };
+      case (?_directory) { _directory };
     };
 
-    // Check if directory exists
-    switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
-      case (null) { return #err("directory not found") };
-      case (?_directory) { /* passthrough */ };
+    // Check if file already exists (content deduplication)
+    switch (Map.get<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash)) {
+      case (null) {
+        /* passthrough - file doesn't exist, continue with allocation */
+      };
+      case (?existing_file_id) {
+        // File exists add it
+        let updated_directory : Directory = {
+          id = dir.id;
+          metadata_ciphertext = dir.metadata_ciphertext;
+          parent_id = dir.parent_id;
+          timestamp = dir.timestamp;
+          child_directories = dir.child_directories;
+          child_files = Array.append(dir.child_files, [existing_file_id]);
+        };
+        Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
+        switch (Map.get<Nat, File>(fs.global_files, Map.nhash, existing_file_id)) {
+          case (null) {
+            return #err("file not found in global files during deduplication");
+          };
+          case (?f) { return #ok(f) };
+        };
+      };
     };
 
     let total_size = size + file_entry_size;
@@ -371,6 +285,11 @@ module DiodeFileSystem {
 
     fs.end_offset += total_size;
     fs.current_storage += total_size;
+
+    // Update next_entry_offset to point to oldest entry if this is the first file
+    if (fs.next_entry_offset == null) {
+      fs.next_entry_offset := ?content_offset;
+    };
 
     // Update file index
     Map.set<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash, fs.file_index);
@@ -409,7 +328,7 @@ module DiodeFileSystem {
 
     let result_id = fs.file_index;
     fs.file_index += 1;
-    return #ok(result_id);
+    return #ok(file);
   };
 
   public func write_file_chunk(fs : FileSystem, content_hash : Blob, chunk_offset : Nat64, chunk : Blob) : Result.Result<(), Text> {
@@ -514,6 +433,31 @@ module DiodeFileSystem {
     };
   };
 
+  private func remove_file_from_all_directories(fs : FileSystem, file_id : Nat) {
+    // Scan all directories and remove this file_id from any that reference it
+    for ((dir_id, directory) in Map.entries(fs.directories)) {
+      // Check if this directory contains the file_id
+      let file_found = Array.find<Nat>(directory.child_files, func(fid : Nat) : Bool { fid == file_id });
+      switch (file_found) {
+        case (?_) {
+          // Directory contains this file, remove it
+          let updated_directory : Directory = {
+            id = directory.id;
+            metadata_ciphertext = directory.metadata_ciphertext;
+            parent_id = directory.parent_id;
+            timestamp = directory.timestamp;
+            child_directories = directory.child_directories;
+            child_files = Array.filter<Nat>(directory.child_files, func(fid : Nat) : Bool { fid != file_id });
+          };
+          Map.set<Blob, Directory>(fs.directories, Map.bhash, dir_id, updated_directory);
+        };
+        case (null) {
+          // Directory doesn't contain this file, skip
+        };
+      };
+    };
+  };
+
   private func remove_next_file_entry(fs : FileSystem) {
     switch (fs.next_entry_offset) {
       case (null) { return };
@@ -536,27 +480,13 @@ module DiodeFileSystem {
           case (?file) {
             let file_id = file.id;
             let content_hash = file.content_hash;
-            let directory_id = file.directory_id;
 
             // Remove from file index and global files map
             Map.delete<Blob, Nat>(fs.file_index_map, Map.bhash, content_hash);
             Map.delete<Nat, File>(fs.global_files, Map.nhash, file_id);
 
-            // Update directory file entries
-            switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
-              case (null) {};
-              case (?dir) {
-                let updated_directory : Directory = {
-                  id = dir.id;
-                  metadata_ciphertext = dir.metadata_ciphertext;
-                  parent_id = dir.parent_id;
-                  timestamp = dir.timestamp;
-                  child_directories = dir.child_directories;
-                  child_files = Array.filter<Nat>(dir.child_files, func(fid : Nat) : Bool { fid != file_id });
-                };
-                Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
-              };
-            };
+            // Remove from ALL directories that reference this file
+            remove_file_from_all_directories(fs, file_id);
             // Update current storage
             let total_file_size = size + file_entry_size;
             if (fs.current_storage >= total_file_size) {
@@ -567,8 +497,34 @@ module DiodeFileSystem {
 
             // Mark entry as empty by setting size to 0
             WriteableBand.writeNat64(fs.files, length_offset, 0);
-            // For now, just set to null. It will be recalculated when needed.
-            fs.next_entry_offset := null;
+
+            // Advance next_entry_offset to next entry in ring buffer
+            let next_offset = length_offset + total_file_size;
+            if (next_offset >= fs.max_storage) {
+              // Wrap around to beginning
+              fs.next_entry_offset := ?0;
+            } else {
+              fs.next_entry_offset := ?next_offset;
+            };
+
+            // Check if the next entry is empty or if we've wrapped around to our end position
+            // If so, there are no more files to remove
+            switch (fs.next_entry_offset) {
+              case (?next_pos) {
+                if (next_pos >= fs.end_offset) {
+                  // We've caught up to the current end, no more files to remove
+                  fs.next_entry_offset := null;
+                } else {
+                  // Check if the next entry has size 0 (empty)
+                  let next_size = WriteableBand.readNat64(fs.files, next_pos);
+                  if (next_size == 0) {
+                    // Next entry is empty, no more files to remove
+                    fs.next_entry_offset := null;
+                  };
+                };
+              };
+              case (null) { /* already null */ };
+            };
           };
           case (null) {
             // File not found, just set next_entry_offset to null

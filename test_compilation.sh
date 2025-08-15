@@ -66,7 +66,7 @@ print_status "  ✅ Added chunked download functionality (read_file_chunk)"
 print_status "  ✅ Added finalized field to File type"
 print_status "  ✅ Added write_file() convenience function for small files"
 print_status "  ✅ Updated tests with comprehensive chunked operation examples"
-print_status "  ✅ Maintained backward compatibility for existing add_file() function"
+print_status "  ✅ Maintained backward compatibility for existing write_file() function"
 
 echo ""
 print_status "Note: Full mops test requires DFX which wasn't installed in this environment,"
