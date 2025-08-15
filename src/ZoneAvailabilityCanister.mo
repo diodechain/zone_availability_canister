@@ -276,7 +276,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.delete_file(file_system, content_hash);
   };
 
-  public shared (msg) func allocate_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, size : Nat64) : async Result.Result<Nat, Text> {
+  public shared (msg) func allocate_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, size : Nat64) : async Result.Result<DiodeFileSystem.File, Text> {
     assert_membership(msg.caller);
     ignore await request_topup_if_low();
     DiodeFileSystem.allocate_file(file_system, directory_id, name_hash, content_hash, size);
@@ -372,7 +372,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    407;
+    408;
   };
 
   public query func get_stable_storage_size() : async Nat {

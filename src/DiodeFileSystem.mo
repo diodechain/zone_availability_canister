@@ -326,7 +326,6 @@ module DiodeFileSystem {
       };
     };
 
-    let result_id = fs.file_index;
     fs.file_index += 1;
     return #ok(file);
   };
