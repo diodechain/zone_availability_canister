@@ -586,7 +586,16 @@ module DiodeFileSystem {
         let files = Array.mapFilter<Nat, File>(
           directory.child_files,
           func(file_id : Nat) : ?File {
-            return get_file_by_id(fs, file_id);
+            switch (get_file_by_id(fs, file_id)) {
+              case (null) { null };
+              case (?file) {
+                if (file.finalized) {
+                  ?file;
+                } else {
+                  null;
+                };
+              };
+            };
           },
         );
         files;

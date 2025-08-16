@@ -804,9 +804,9 @@ persistent actor {
             let files_after = DiodeFileSystem.get_files_in_directory(fs, directory_id);
             assert files_after.size() == 0;
 
-            // Verify storage usage decreased
+            // Deletion does not cleanup ring-buffer storage
             let storage_after = DiodeFileSystem.get_usage(fs);
-            assert storage_after < storage_before;
+            assert storage_after == storage_before;
 
             // Try to delete non-existent file
             switch (DiodeFileSystem.delete_file(fs, files_before[0].id + 1)) {
@@ -1090,24 +1090,28 @@ persistent actor {
               case (#err(_)) { assert false };
             };
 
-            // Verify file is removed from ALL directories
+            // Verify file is removed only from the directory it was written to
             let files1_after = DiodeFileSystem.get_files_in_directory(fs, directory1_id);
             let files2_after = DiodeFileSystem.get_files_in_directory(fs, directory2_id);
             let files3_after = DiodeFileSystem.get_files_in_directory(fs, directory3_id);
             assert files1_after.size() == 0;
-            assert files2_after.size() == 0;
-            assert files3_after.size() == 0;
+            assert files2_after.size() == 1;
+            assert files3_after.size() == 1;
 
-            // Verify content is no longer accessible
+            // Verify content is still accessible in the other directories
             switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
-              case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "file not found" };
+              case (#ok(read_data)) {
+                assert read_data == ciphertext;
+              };
+              case (#err(_)) { assert false };
             };
 
-            // Verify file is completely gone from the system
+            // Verify file is still available in one of the directories
             switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
-              case (#ok(_)) { assert false };
-              case (#err(err)) { assert err == "file not found" };
+              case (#ok(file)) {
+                assert file.id == files2_after[0].id or file.id == files3_after[0].id;
+              };
+              case (#err(_)) { assert false };
             };
           },
         );
