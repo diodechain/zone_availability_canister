@@ -270,10 +270,10 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.write_file(file_system, directory_id, name_hash, content_hash, ciphertext);
   };
 
-  public shared (msg) func delete_file(content_hash : Blob) : async Result.Result<(), Text> {
+  public shared (msg) func delete_file(file_id : Nat) : async Result.Result<(), Text> {
     assert_membership(msg.caller);
     ignore await request_topup_if_low();
-    DiodeFileSystem.delete_file(file_system, content_hash);
+    DiodeFileSystem.delete_file(file_system, file_id);
   };
 
   public shared (msg) func allocate_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, size : Nat64) : async Result.Result<DiodeFileSystem.File, Text> {

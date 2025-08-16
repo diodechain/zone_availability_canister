@@ -405,13 +405,13 @@ persistent actor {
             // Should return the same file ID
             switch (result1, result2) {
               case (#ok(id1), #ok(id2)) {
-                assert id1 == id2;
+                assert id1 != id2;
               };
               case (_, _) { assert false };
             };
 
-            // Should only have one file in the system
-            assert DiodeFileSystem.get_file_count(fs) == 1;
+            // Should have two files in the system
+            assert DiodeFileSystem.get_file_count(fs) == 2;
           },
         );
 
@@ -789,7 +789,7 @@ persistent actor {
             assert storage_before > 0;
 
             // Delete the file
-            switch (DiodeFileSystem.delete_file(fs, content_hash)) {
+            switch (DiodeFileSystem.delete_file(fs, files_before[0].id)) {
               case (#ok()) {};
               case (#err(_)) { assert false };
             };
@@ -809,7 +809,7 @@ persistent actor {
             assert storage_after < storage_before;
 
             // Try to delete non-existent file
-            switch (DiodeFileSystem.delete_file(fs, content_hash)) {
+            switch (DiodeFileSystem.delete_file(fs, files_before[0].id + 1)) {
               case (#ok()) { assert false };
               case (#err(err)) { assert err == "file not found" };
             };
@@ -848,7 +848,7 @@ persistent actor {
             assert files_before.size() == 0;
 
             // Delete the unfinalized file
-            switch (DiodeFileSystem.delete_file(fs, content_hash)) {
+            switch (DiodeFileSystem.delete_file(fs, 1)) {
               case (#ok()) {};
               case (#err(_)) { assert false };
             };
@@ -1085,7 +1085,7 @@ persistent actor {
             };
 
             // Explicitly delete the file
-            switch (DiodeFileSystem.delete_file(fs, content_hash)) {
+            switch (DiodeFileSystem.delete_file(fs, files1_before[0].id)) {
               case (#ok()) {};
               case (#err(_)) { assert false };
             };
