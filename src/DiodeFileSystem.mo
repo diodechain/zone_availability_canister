@@ -309,6 +309,8 @@ module DiodeFileSystem {
           case (#ok()) {};
           case (#err(err)) { return #err(err) };
         };
+
+        fs.file_index += 1;
         return #ok({
           id = file_info.id;
           timestamp = file_info.timestamp;

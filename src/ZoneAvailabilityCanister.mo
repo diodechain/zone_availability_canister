@@ -372,7 +372,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    409;
+    410;
   };
 
   public query func get_stable_storage_size() : async Nat {

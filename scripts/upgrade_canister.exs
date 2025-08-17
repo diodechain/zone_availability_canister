@@ -63,7 +63,7 @@ case System.argv() do
     args = Candid.encode_parameters([{:record, type}], [values])
 
     [] =
-      ICPAgent.call(factory, w, "upgrade_code", [:principal, :blob, :blob], [
+      ICPAgent.call(factory, w, "install_code", [:principal, :blob, :blob], [
         destination,
         wasm,
         args
