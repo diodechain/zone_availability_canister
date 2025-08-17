@@ -14,6 +14,10 @@ module DiodeFileSystem {
   // Root directory has a fixed ID of 32 zero bytes
   public let ROOT_DIRECTORY_ID : Blob = "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00";
 
+  // Validation constants
+  private let MIN_DIRECTORY_ID_SIZE : Nat = 8;
+  private let MIN_CONTENT_HASH_SIZE : Nat = 16;
+
   public type File = {
     id : Nat;
     timestamp : Nat;
@@ -52,6 +56,44 @@ module DiodeFileSystem {
 
   let file_entry_size : Nat64 = 8; // only storing length (Nat64) for the ciphertext
 
+  // Helper function to add a child directory to a parent directory
+  private func add_child_directory_to_parent(fs : FileSystem, parent_id : Blob, child_id : Blob) : Result.Result<(), Text> {
+    let parent_dir = switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, parent_id)) {
+      case (null) { return #err("parent directory not found") };
+      case (?dir) { dir };
+    };
+
+    let updated_parent : Directory = {
+      id = parent_dir.id;
+      metadata_ciphertext = parent_dir.metadata_ciphertext;
+      parent_id = parent_dir.parent_id;
+      timestamp = parent_dir.timestamp;
+      child_directories = Array.append(parent_dir.child_directories, [child_id]);
+      child_files = parent_dir.child_files;
+    };
+    Map.set<Blob, Directory>(fs.directories, Map.bhash, parent_id, updated_parent);
+    #ok();
+  };
+
+  // Helper function to add a file to a directory
+  private func add_file_to_directory(fs : FileSystem, directory_id : Blob, file_id : Nat) : Result.Result<(), Text> {
+    let dir = switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
+      case (null) { return #err("directory not found") };
+      case (?d) { d };
+    };
+
+    let updated_directory : Directory = {
+      id = dir.id;
+      metadata_ciphertext = dir.metadata_ciphertext;
+      parent_id = dir.parent_id;
+      timestamp = dir.timestamp;
+      child_directories = dir.child_directories;
+      child_files = Array.append(dir.child_files, [file_id]);
+    };
+    Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
+    #ok();
+  };
+
   public type FileSystem = {
     var files : WriteableBand.WriteableBand; // ring buffer for file contents
     var file_index : Nat;
@@ -60,7 +102,6 @@ module DiodeFileSystem {
     var blob_index_map : Map.Map<Blob, BlobInfo>; // content_hash -> BlobInfo
     var max_storage : Nat64;
     var current_storage : Nat64;
-    var first_entry_offset : Nat64;
     var end_offset : Nat64;
     var next_entry_offset : ?Nat64; // always points to the oldest entry
   };
@@ -74,7 +115,6 @@ module DiodeFileSystem {
       var blob_index_map = Map.new<Blob, BlobInfo>();
       var max_storage = max_storage;
       var current_storage = 0 : Nat64;
-      var first_entry_offset = 0 : Nat64;
       var end_offset = 0 : Nat64;
       var next_entry_offset = null : ?Nat64; // no entries to remove in empty filesystem
     };
@@ -98,8 +138,8 @@ module DiodeFileSystem {
   };
 
   public func create_directory(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, parent_id : ?Blob) : Result.Result<(), Text> {
-    if (directory_id.size() < 8) {
-      return #err("directory_id must be at least 8 bytes");
+    if (directory_id.size() < MIN_DIRECTORY_ID_SIZE) {
+      return #err("directory_id must be at least " # Nat.toText(MIN_DIRECTORY_ID_SIZE) # " bytes");
     };
 
     // Prevent creating directory with the reserved root ID
@@ -152,23 +192,10 @@ module DiodeFileSystem {
         return #err("internal error: null parent_id after validation");
       };
       case (?parent) {
-        let parent_dir = switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, parent)) {
-          case (null) {
-            // This should never happen due to earlier validation
-            return #err("internal error: parent directory disappeared");
-          };
-          case (?dir) { dir };
+        switch (add_child_directory_to_parent(fs, parent, directory_id)) {
+          case (#ok()) {};
+          case (#err(err)) { return #err("internal error: " # err) };
         };
-
-        let updated_parent : Directory = {
-          id = parent_dir.id;
-          metadata_ciphertext = parent_dir.metadata_ciphertext;
-          parent_id = parent_dir.parent_id;
-          timestamp = parent_dir.timestamp;
-          child_directories = Array.append(parent_dir.child_directories, [directory_id]);
-          child_files = parent_dir.child_files;
-        };
-        Map.set<Blob, Directory>(fs.directories, Map.bhash, parent, updated_parent);
       };
     };
 
@@ -237,11 +264,11 @@ module DiodeFileSystem {
   };
 
   public func allocate_file(fs : FileSystem, directory_id : Blob, name_ciphertext : Blob, content_hash : Blob, size : Nat64) : Result.Result<File, Text> {
-    if (directory_id.size() < 8) {
-      return #err("directory_id must be at least 8 bytes");
+    if (directory_id.size() < MIN_DIRECTORY_ID_SIZE) {
+      return #err("directory_id must be at least " # Nat.toText(MIN_DIRECTORY_ID_SIZE) # " bytes");
     };
-    if (content_hash.size() < 16) {
-      return #err("content_hash must be at least 16 bytes");
+    if (content_hash.size() < MIN_CONTENT_HASH_SIZE) {
+      return #err("content_hash must be at least " # Nat.toText(MIN_CONTENT_HASH_SIZE) # " bytes");
     };
     if (size == 0) {
       return #err("size must be greater than 0");
@@ -278,16 +305,10 @@ module DiodeFileSystem {
         };
         Map.set<Blob, BlobInfo>(fs.blob_index_map, Map.bhash, content_hash, updated_blob);
 
-        let updated_directory : Directory = {
-          id = dir.id;
-          metadata_ciphertext = dir.metadata_ciphertext;
-          parent_id = dir.parent_id;
-          timestamp = dir.timestamp;
-          child_directories = dir.child_directories;
-          child_files = Array.append(dir.child_files, [file_info.id]);
+        switch (add_file_to_directory(fs, directory_id, file_info.id)) {
+          case (#ok()) {};
+          case (#err(err)) { return #err(err) };
         };
-
-        Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
         return #ok({
           id = file_info.id;
           timestamp = file_info.timestamp;
@@ -331,9 +352,6 @@ module DiodeFileSystem {
     };
     Map.set<Blob, BlobInfo>(fs.blob_index_map, Map.bhash, content_hash, blob_info);
 
-    // Update file index
-    Map.set<Blob, BlobInfo>(fs.blob_index_map, Map.bhash, content_hash, blob_info);
-
     // Create File struct (unfinalized)
     let file : FileInfo = {
       id = fs.file_index;
@@ -347,20 +365,9 @@ module DiodeFileSystem {
     Map.set<Nat, FileInfo>(fs.global_files, Map.nhash, fs.file_index, file);
 
     // Add to directory's child_files
-    let directory = Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id);
-    switch (directory) {
-      case (null) { return #err("directory not found during allocate") };
-      case (?dir) {
-        let updated_directory : Directory = {
-          id = dir.id;
-          metadata_ciphertext = dir.metadata_ciphertext;
-          parent_id = dir.parent_id;
-          timestamp = dir.timestamp;
-          child_directories = dir.child_directories;
-          child_files = Array.append(dir.child_files, [fs.file_index]);
-        };
-        Map.set<Blob, Directory>(fs.directories, Map.bhash, directory_id, updated_directory);
-      };
+    switch (add_file_to_directory(fs, directory_id, fs.file_index)) {
+      case (#ok()) {};
+      case (#err(err)) { return #err(err) };
     };
 
     fs.file_index += 1;
@@ -608,18 +615,14 @@ module DiodeFileSystem {
       case (null) { [] };
       case (?directory) {
         let child_ids = directory.child_directories;
-        let children = Array.init<Directory>(child_ids.size(), directory); // placeholder
-        var index = 0;
-        for (child_id in child_ids.vals()) {
-          switch (get_directory(fs, child_id)) {
-            case (null) {};
-            case (?child) {
-              children[index] := child;
-            };
-          };
-          index += 1;
-        };
-        Array.freeze(children);
+        // Use mapFilter to handle missing directories correctly
+        let children = Array.mapFilter<Blob, Directory>(
+          child_ids,
+          func(child_id : Blob) : ?Directory {
+            get_directory(fs, child_id);
+          },
+        );
+        children;
       };
     };
   };
