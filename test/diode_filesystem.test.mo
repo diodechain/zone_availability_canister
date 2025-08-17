@@ -1039,9 +1039,10 @@ persistent actor {
 
             // Both should reference the same underlying file (content deduplication)
             assert files1[0].content_hash == content_hash;
-            // Note: The current implementation reuses the same file record,
-            // so they will have the same metadata from the first file
-            // This test will fail because files2 will be empty (size 0)
+            assert files1[0].id != files2[0].id;
+            assert files1[0].metadata_ciphertext == name1;
+            assert files1[0].metadata_ciphertext != files2[0].metadata_ciphertext;
+            assert files2[0].metadata_ciphertext == name2;
           },
         );
 
