@@ -141,7 +141,7 @@ persistent actor CanisterFactory {
       wasm_module = wasmModule;
       mode = #upgrade(
         ?{
-          wasm_memory_persistence = ?#replace;
+          wasm_memory_persistence = ?#keep;
           skip_pre_upgrade = null;
         }
       );
@@ -175,7 +175,7 @@ persistent actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    105;
+    106;
   };
 
   public shared func get_stable_size() : async Nat32 {
