@@ -275,9 +275,9 @@ module DiodeFileSystem {
     };
 
     // Check if directory exists
-    let dir = switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
+    switch (Map.get<Blob, Directory>(fs.directories, Map.bhash, directory_id)) {
       case (null) { return #err("directory not found") };
-      case (?_directory) { _directory };
+      case (?_directory) { };
     };
 
     // Check if file already exists (content deduplication)
