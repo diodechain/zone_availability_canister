@@ -12,10 +12,12 @@ if [ ${machine} = "Mac" ]
 then
   echo "Downloading didc for Mac to ~/bin/didc"
   curl -fsSL https://github.com/dfinity/candid/releases/download/${release}/didc-macos > ~/bin/didc
+  chmod +x ~/bin/didc
 elif [ ${machine} = "Linux" ]
 then
   echo "Downloading didc for Linux to ~/bin/didc"
   curl -fsSL https://github.com/dfinity/candid/releases/download/${release}/didc-linux64 > ~/bin/didc
+  chmod +x ~/bin/didc
 else
   echo "Could not detect a supported operating system. Please note that didc is currently only supported for Mac and Linux"
 fi

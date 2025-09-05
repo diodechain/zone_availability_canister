@@ -32,11 +32,12 @@ case System.argv() do
     account = DiodeClient.Base16.decode(zone_id)
     DiodeClient.interface_add()
 
-    chain = cond do
-      DiodeClient.Shell.Moonbeam.get_account_root(account) != nil -> "moonbeam"
-      DiodeClient.Shell.get_account_root(account) != nil -> "diode"
-      true -> raise "Zone not found on-chain"
-    end
+    chain =
+      cond do
+        DiodeClient.Shell.Moonbeam.get_account_root(account) != nil -> "moonbeam"
+        DiodeClient.Shell.get_account_root(account) != nil -> "diode"
+        true -> raise "Zone not found on-chain"
+      end
 
     IO.puts("Chain: #{chain}")
     [version] = ICPAgent.query(destination_text, w, "get_version")
@@ -63,7 +64,7 @@ case System.argv() do
     args = Candid.encode_parameters([{:record, type}], [values])
 
     [] =
-      ICPAgent.call(factory, w, "install_code", [:principal, :blob, :blob], [
+      ICPAgent.call(factory, w, "upgrade_code", [:principal, :blob, :blob], [
         destination,
         wasm,
         args
