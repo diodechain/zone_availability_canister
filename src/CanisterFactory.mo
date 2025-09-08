@@ -58,7 +58,7 @@ persistent actor CanisterFactory {
     });
     let cycles_balance = status.cycles;
     if (cycles_balance >= 700_000_000_000) {
-      trap("Canister has enough cycles");
+      return #err(#other("Canister has enough cycles"));
     };
 
     await* CyclesManager.transferCycles({
@@ -194,7 +194,7 @@ persistent actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    107;
+    108;
   };
 
   public shared func get_stable_size() : async Nat32 {
