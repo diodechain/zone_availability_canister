@@ -168,9 +168,8 @@ persistent actor CanisterFactory {
       throw Error.reject("Unauthorized access. Caller is not an admin.");
     };
 
-    await IC.ic.canister_status({canister_id = canisterId});
+    await IC.ic.canister_status({ canister_id = canisterId });
   };
-
 
   func admin_principal() : Principal {
     Principal.fromText("mnkyz-mnbtr-dsmec-2mbve-2yktb-kaktp-jpw52-vjbxb-dzdjm-4rglf-uqe");
