@@ -61,3 +61,11 @@ $ mops test
 $ dfx start --background
 $ dfx deploy
 ```
+
+### Production Upgrade
+
+This upgrades a specific ZAC (only possible as long as the Factory is still a controller)
+
+```shell
+$ ./scripts/upgrade_canister.exs ic avjhi-uqaaa-aaaao-qj4ga-cai
+```

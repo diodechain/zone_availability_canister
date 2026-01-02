@@ -309,6 +309,13 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     DiodeFileSystem.get_file_by_id(file_system, file_id);
   };
 
+  public query (msg) func get_file_by_id_batch(file_ids : [Nat]) : async [?DiodeFileSystem.File] {
+    assert_membership(msg.caller);
+    Array.map<Nat, ?DiodeFileSystem.File>(file_ids, func(file_id : Nat) : ?DiodeFileSystem.File {
+      DiodeFileSystem.get_file_by_id(file_system, file_id);
+    });
+  };
+
   public query (msg) func get_directory(directory_id : Blob) : async ?DiodeFileSystem.Directory {
     assert_membership(msg.caller);
     DiodeFileSystem.get_directory(file_system, directory_id);
@@ -372,7 +379,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    410;
+    411;
   };
 
   public query func get_stable_storage_size() : async Nat {
