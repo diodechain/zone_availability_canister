@@ -64,6 +64,12 @@ $ dfx deploy
 
 ### Production Upgrade
 
+```shell
+$ dfx canister --ic stop CanisterFactory
+$ dfx deploy --ic CanisterFactory
+$ dfx canister --ic start CanisterFactory
+```
+
 This upgrades a specific ZAC (only possible as long as the Factory is still a controller)
 
 ```shell
