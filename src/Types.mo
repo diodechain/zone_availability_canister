@@ -1,3 +1,5 @@
+import MetaData "MetaData";
+
 module Types {
 
   //1. Type that describes the Request arguments for an HTTPS outcall
@@ -78,5 +80,36 @@ module Types {
   public type EcdsaPublicKeyResult = {
     public_key : Blob;
     chain_code : Blob;
+  };
+
+  public type AggregateStatusV1 = {
+    // System
+    version : Nat;
+    installation_id : Int;
+    zone_id : Text;
+    role : Nat;
+    cycles_balance : Nat;
+    stable_storage_size : Nat;
+
+    // Metadata
+    metadata_timestamps : [MetaData.DirectoryEntry];
+    metadata_info : MetaData.MetaDataInfo;
+
+    // DiodeMessages
+    message_min_id : Nat32;
+    message_max_id : Nat32;
+    message_usage : Nat64;
+    message_count : Nat;
+
+    // FileSystem
+    file_system_last_file_id : Nat;
+    file_system_file_count : Nat;
+    file_system_directory_count : Nat;
+    file_system_max_usage : Nat64;
+
+    // Attachments
+    attachment_usage : Nat64;
+    attachment_count : Nat;
+    attachment_max_usage : Nat64;
   };
 };

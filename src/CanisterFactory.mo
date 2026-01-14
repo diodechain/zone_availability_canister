@@ -10,6 +10,10 @@ import Principal "mo:base/Principal";
 import ZoneAvailabilityCanister "ZoneAvailabilityCanister";
 import BTree "mo:btree/BTree";
 import Iter "mo:base/Iter";
+import Prim "mo:⛔";
+import Nat32 "mo:base/Nat32";
+import Nat64 "mo:base/Nat64";
+
 
 persistent actor CanisterFactory {
   // Initializes a cycles manager
@@ -193,15 +197,15 @@ persistent actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    109;
+    110;
   };
 
   public shared func get_stable_size() : async Nat32 {
-    await IC.ic.stable_size();
+    Nat32.fromNat(Prim.rts_stable_memory_size());
   };
 
   public shared func get_stable64_size() : async Nat64 {
-    await IC.ic.stable64_size();
+    Nat64.fromNat(Prim.rts_stable_memory_size());
   };
 
   public query func get_cycles_manager_info() : async Text {

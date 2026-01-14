@@ -36,6 +36,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   var meta_data : MetaData.MetaData = MetaData.new();
   var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);
   var file_system : DiodeFileSystem.FileSystem = DiodeFileSystem.new(128_000_000);
+  let version : Nat = 412;
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below .7 trillion cycles, topup by .5 trillion (~65 cents)
@@ -46,6 +47,82 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
       method = #by_amount(500_000_000_000);
     };
   });
+
+  /**
+   * Fast Aggregate Results API
+   */
+  public query (msg) func get_aggregate_status_v1() : async Types.AggregateStatusV1 {
+    let role = MemberCache.get_role(zone_members, msg.caller);
+
+    if (role > 0) {
+      {
+        // System
+        version = version;
+        installation_id = installation_id;
+        zone_id = zone_members.zone_id;
+        role = role;
+        cycles_balance = Cycles.balance();
+        stable_storage_size = Prim.rts_stable_memory_size();
+
+        // Metadata
+        metadata_timestamps = MetaData.get_timestamps(meta_data);
+        metadata_info = MetaData.get_meta_data_info(meta_data);
+
+        // DiodeMessages
+        message_min_id = DiodeMessages.get_min_message_id(dm);
+        message_max_id = DiodeMessages.get_max_message_id(dm);
+        message_usage = DiodeMessages.get_usage(dm);
+        message_count = DiodeMessages.get_count(dm);
+
+        // FileSystem
+        file_system_last_file_id = DiodeFileSystem.get_last_file_id(file_system);
+        file_system_file_count = DiodeFileSystem.get_file_count(file_system);
+        file_system_directory_count = DiodeFileSystem.get_directory_count(file_system);
+        file_system_max_usage = DiodeFileSystem.get_max_usage(file_system);
+
+        // Attachments
+        attachment_usage = DiodeAttachments.get_usage(attachments);
+        attachment_count = DiodeAttachments.get_count(attachments);
+        attachment_max_usage = DiodeAttachments.get_max_usage(attachments);
+      };
+    } else {
+      {
+        // System
+        version = version;
+        installation_id = installation_id;
+        zone_id = zone_members.zone_id;
+        role = role;
+        cycles_balance = Cycles.balance();
+        stable_storage_size = Prim.rts_stable_memory_size();
+
+        // Metadata
+        metadata_timestamps = [];
+        metadata_info = {
+          public_key = null;
+          vet_protected_key = null;
+          manifest = 0;
+          timestamp = 0;
+        };
+
+        // DiodeMessages
+        message_min_id = 0;
+        message_max_id = 0;
+        message_usage = 0;
+        message_count = 0;
+
+        // FileSystem
+        file_system_last_file_id = 0;
+        file_system_file_count = 0;
+        file_system_directory_count = 0;
+        file_system_max_usage = 0;
+
+        // Attachments
+        attachment_usage = 0;
+        attachment_count = 0;
+        attachment_max_usage = 0;
+      };
+    };
+  };
 
   /**
    * DiodeMessages API
@@ -161,6 +238,12 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   public query (msg) func get_data_entry(key : Nat8) : async ?MetaData.DataEntry {
     assert_membership(msg.caller);
     MetaData.get_data_entry(meta_data, key);
+  };
+
+  public query func get_data_entry_batch(keys : [Nat8]) : async [?MetaData.DataEntry] {
+    Array.map<Nat8, ?MetaData.DataEntry>(keys, func(key : Nat8) : ?MetaData.DataEntry {
+      MetaData.get_data_entry(meta_data, key);
+    });
   };
 
   public shared (msg) func set_data_entry(key : Nat8, data : Blob) {
@@ -379,7 +462,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public query func get_version() : async Nat {
-    411;
+    version;
   };
 
   public query func get_stable_storage_size() : async Nat {
