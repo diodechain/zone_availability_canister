@@ -13,11 +13,13 @@ import Iter "mo:base/Iter";
 import Prim "mo:⛔";
 import Nat32 "mo:base/Nat32";
 import Nat64 "mo:base/Nat64";
-
+import Nat "mo:base/Nat";
 
 persistent actor CanisterFactory {
   // Initializes a cycles manager
-  let cyclesManager = CyclesManager.init({
+  let minCyclesPerTopup = 50_000_000_000;
+
+  var cyclesManager = CyclesManager.init({
     // By default, with each transfer request 500 billion cycles will be transferred
     // to the requesting canister, provided they are permitted to request cycles
     //
@@ -25,15 +27,15 @@ persistent actor CanisterFactory {
     defaultCyclesSettings = {
       quota = #fixedAmount(500_000_000_000);
     };
-    // Allow an aggregate of 1 trillion cycles to be transferred every 24 hours (~1.30 USD)
+    // Allow an aggregate of 10 trillion cycles to be transferred every 24 hours (~13 USD)
     aggregateSettings = {
       quota = #rate({
-        maxAmount = 1_000_000_000_000;
+        maxAmount = 10_000_000_000_000;
         durationInSeconds = 24 * 60 * 60;
       });
     };
     // 50 billion is a good default minimum for most low use canisters
-    minCyclesPerTopup = ?50_000_000_000;
+    minCyclesPerTopup = ?minCyclesPerTopup;
   });
 
   // @required - IMPORTANT!!!
@@ -61,14 +63,15 @@ persistent actor CanisterFactory {
       canister_id = canisterId;
     });
     let cycles_balance = status.cycles;
-    if (cycles_balance >= 700_000_000_000) {
+    let target_cycles = 700_000_000_000;
+    if (cycles_balance >= target_cycles) {
       return #err(#other("Canister has enough cycles"));
     };
 
     await* CyclesManager.transferCycles({
       cyclesManager;
       canister = canisterId;
-      cyclesRequested = 700_000_000_000 - cycles_balance;
+      cyclesRequested = Nat.max(minCyclesPerTopup, target_cycles - cycles_balance);
     });
   };
 
@@ -197,7 +200,7 @@ persistent actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    110;
+    111;
   };
 
   public shared func get_stable_size() : async Nat32 {
@@ -225,5 +228,49 @@ persistent actor CanisterFactory {
       },
     )
     |> Iter.toArray(_);
+  };
+
+  // Update aggregate quota settings
+  // This function allows updating the aggregate quota limit and duration
+  public shared ({ caller }) func update_aggregate_quota_settings(
+    maxAmount : Nat,
+    durationInSeconds : Nat,
+  ) : async () {
+    if (not isAdmin(caller)) {
+      throw Error.reject("Unauthorized access. Caller is not an admin.");
+    };
+
+    CyclesManager.setAggregateCyclesQuota(
+      cyclesManager,
+      #rate({
+        maxAmount = maxAmount;
+        durationInSeconds = durationInSeconds;
+      }),
+    );
+  };
+
+  type AggregateQuotaSettings = {
+    maxAmount : Nat;
+    durationInSeconds : Nat;
+    cyclesUsed : Nat;
+  };
+
+  public query func get_aggregate_quota_settings() : async AggregateQuotaSettings {
+    switch (cyclesManager.aggregateSettings.quota) {
+      case (#rate(rate)) {
+        {
+          maxAmount = rate.maxAmount;
+          durationInSeconds = rate.durationInSeconds;
+          cyclesUsed = cyclesManager.aggregateSettings.cyclesUsed;
+        };
+      };
+      case (_) {
+        {
+          maxAmount = 0;
+          durationInSeconds = 0;
+          cyclesUsed = 0;
+        };
+      };
+    };
   };
 };

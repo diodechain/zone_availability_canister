@@ -1,19 +1,9 @@
 #!/usr/bin/env elixir
-Mix.install([:icp_agent, :candid])
+Mix.install([{:icp_agent, "~> 0.1.8"}, :candid, {:diode_client, "~> 1.3.5"}])
+Code.eval_file("scripts/factory.ex")
 :erlang.system_flag(:backtrace_depth, 30)
 
-w =
-  File.read!("diode_glmr.key")
-  |> String.trim()
-  |> DiodeClient.Base16.decode()
-  |> DiodeClient.Wallet.from_privkey()
-
-factory = "dgnum-qiaaa-aaaao-qj3ta-cai"
-
-[children] =
-  ICPAgent.query(factory, w, "get_cycles_manager_children", [], [], [{:vec, :principal}])
-
-children = Enum.map(children, &ICPAgent.encode_textual/1) |> Enum.with_index()
+children = Factory.children() |> Enum.with_index()
 
 {upgrade?, wasm} =
   if "--upgrade" in System.argv() do
@@ -28,52 +18,79 @@ children = Enum.map(children, &ICPAgent.encode_textual/1) |> Enum.with_index()
     {false, nil}
   end
 
-for {child, index} <- children do
-  IO.puts("#{index} - #{child}")
+w = Factory.wallet()
 
-  if upgrade? do
-    [version] = ICPAgent.query(child, w, "get_version")
-    IO.puts("Current canister version: #{version}")
+Task.async_stream(
+  children,
+  fn {child, index} ->
+    action =
+      if upgrade? do
+        version =
+          case ICPAgent.query(child, w, "get_version") do
+            {:error, reason} ->
+              is_stopped = String.contains?(inspect(reason), "is stopped")
+              is_out_of_cycles = String.contains?(inspect(reason), "out of cycles")
 
-    if version < 410 do
-      [zone_id] = ICPAgent.query(child, w, "get_zone_id")
-      account = DiodeClient.Base16.decode(zone_id)
+              if is_stopped or is_out_of_cycles do
+                IO.puts("Refilling and starting canister #{child}")
+                Factory.refill(child) |> IO.inspect(label: "Refill")
+                Factory.start_canister(child) |> IO.inspect(label: "Start")
 
-      chain =
-        cond do
-          DiodeClient.Shell.Moonbeam.get_account_root(account) != nil -> "moonbeam"
-          DiodeClient.Shell.get_account_root(account) != nil -> "diode"
-          true -> raise "Zone not found on-chain"
+                case ICPAgent.query(child, w, "get_version") do
+                  {:error, reason} ->
+                    "error: #{inspect(reason)}"
+
+                  [version] ->
+                    version
+                end
+              end
+
+              "error: #{inspect(reason)}"
+
+            [version] ->
+              version
+          end
+
+        if is_integer(version) and version < 411 do
+          [zone_id] = ICPAgent.query(child, w, "get_zone_id")
+          account = DiodeClient.Base16.decode(zone_id)
+
+          chain =
+            cond do
+              DiodeClient.Shell.Moonbeam.get_account_root(account) != nil -> "moonbeam"
+              DiodeClient.Shell.get_account_root(account) != nil -> "diode"
+              DiodeClient.Shell.OasisSapphire.get_account_root(account) != nil -> "oasis"
+              true -> nil
+            end
+
+          if chain == nil do
+            "#{version} -> not found on-chain"
+          else
+            Factory.upgrade(child, chain, zone_id, wasm)
+            |> case do
+              {:error, reason} ->
+                "#{version} -> error: #{inspect(reason)}"
+
+              _ ->
+                "#{version} -> upgraded"
+            end
+          end
+        else
+          if is_integer(version) do
+            "#{version} -> already upgraded"
+          else
+            "error: #{inspect(version)}"
+          end
         end
+      else
+        "none"
+      end
 
-      {rpc_host, rpc_path} =
-        case chain do
-          "moonbeam" ->
-            {"rpc.api.moonbeam.network", "/"}
-
-          "diode" ->
-            {"prenet.diode.io:8443", "/"}
-        end
-
-      IO.puts("ZoneID: #{zone_id} @ #{chain}")
-
-      type = %{zone_id: :text, rpc_host: :text, rpc_path: :text, cycles_requester_id: :principal}
-
-      values = %{
-        zone_id: zone_id,
-        rpc_host: rpc_host,
-        rpc_path: rpc_path,
-        cycles_requester_id: ICPAgent.decode_textual(factory)
-      }
-
-      args = Candid.encode_parameters([{:record, type}], [values])
-
-      [] =
-        ICPAgent.call(factory, w, "upgrade_code", [:principal, :blob, :blob], [
-          ICPAgent.decode_textual(child),
-          wasm,
-          args
-        ])
+    if not String.contains?(action, "already upgraded") do
+      IO.puts("#{index} - #{child} - #{action}")
     end
-  end
-end
+  end,
+  timeout: :infinity,
+  max_concurrency: 1
+)
+|> Stream.run()

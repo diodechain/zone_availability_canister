@@ -33,7 +33,7 @@ case System.argv() do
       },
       idle_cycles_burned_per_day: :nat,
       module_hash: {:opt, :blob},
-      reserved_cycles: :nat,
+      reserved_cycles: :nat
     }
 
     IO.inspect(
