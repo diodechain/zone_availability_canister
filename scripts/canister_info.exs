@@ -7,10 +7,12 @@ defmodule DB do
   use GenServer
 
   def init(_db) do
-    case File.read("./scripts/canisters.json") do
-      {:ok, content} -> {:ok, Jason.decode!(content)}
-      {:error, _} -> {:ok, %{}}
+    db = case File.read("./scripts/canisters.json") do
+      {:ok, content} -> Jason.decode!(content)
+      {:error, _} -> %{}
     end
+
+    {:ok, %{db: db, last_save: System.os_time(:second)}}
   end
 
   def fetch(row, key, default_fun) do
@@ -37,18 +39,24 @@ defmodule DB do
     GenServer.call(__MODULE__, :save)
   end
 
-  def handle_call({:get, row, key}, _from, db) do
-    {:reply, get_in(db, [row, key]), db}
+  def handle_call({:get, row, key}, _from, state = %{db: db}) do
+    {:reply, get_in(db, [row, key]), state}
   end
 
-  def handle_call(:save, _from, db) do
+  def handle_call(:save, _from, state = %{db: db}) do
     File.write!("./scripts/canisters.json", Jason.encode!(db))
-    {:reply, :ok, db}
+    {:reply, :ok, %{state | last_save: System.os_time(:second)}}
   end
 
-  def handle_cast({:set, row, key, value}, db) do
+  def handle_cast({:set, row, key, value}, state = %{db: db, last_save: last_save}) do
     new_row_value = Map.put(db[row] || %{}, key, value)
-    {:noreply, Map.put(db, row, new_row_value)}
+    state = %{state | db: Map.put(db, row, new_row_value)}
+    if System.os_time(:second) - last_save > 60 do
+      File.write!("./scripts/canisters.json", Jason.encode!(db))
+      {:noreply, %{state | last_save: System.os_time(:second)}}
+    else
+      {:noreply, state}
+    end
   end
 end
 
@@ -80,7 +88,8 @@ targets =
       System.halt(1)
   end
 
-Task.async_stream(targets, fn dst ->
+Enum.with_index(targets, 1)
+|> Task.async_stream(fn {dst, index} ->
   version =
     DB.fetch(dst, :canister_version, fn -> ICPAgent.query(dst, w, "get_version", [], [], :nat) end)
 
@@ -101,8 +110,10 @@ Task.async_stream(targets, fn dst ->
       end)
 
     if chain == nil do
-      IO.puts("#{dst} - #{version} - #{zone_id} - not found on-chain")
+      [index, dst, version, zone_id, "not found on-chain"]
     else
+      chain = if is_binary(chain), do: String.to_atom(chain), else: chain
+
       contract_version =
         DB.fetch(dst, :contract_version, fn ->
           chain.call(account, "Version", [], [], result_types: "uint256")
@@ -116,18 +127,28 @@ Task.async_stream(targets, fn dst ->
 
       name =
         DB.fetch(dst, :owner_name, fn ->
-          DiodeClient.Base16.decode(owner)
-          |> DiodeClient.Contracts.BNS.resolve_address()
+          if owner == "0x000000000000000000000000000000000000dead" do
+            "(0xDEAD)"
+          else
+            DiodeClient.Base16.decode(owner)
+            |> DiodeClient.Contracts.BNS.resolve_address()
+          end
         end)
 
-      IO.puts(
-        "#{dst} - #{version} - #{zone_id} - #{chain} - #{contract_version} - #{owner} - #{name}"
-      )
+      [index, dst, version, zone_id, chain, contract_version, owner, name]
     end
   else
-    IO.puts("#{dst} - #{inspect(version)} - not found")
+    [index, dst, version]
   end
-
-  DB.save()
 end, timeout: :infinity, max_concurrency: 4)
+|> Stream.each(fn {:ok, row} ->
+  line =
+    Enum.map_join(row, "\t", fn
+      {:error, reason} -> inspect(reason)
+      value -> to_string(value)
+    end)
+  IO.puts(line)
+end)
 |> Stream.run()
+
+DB.save()

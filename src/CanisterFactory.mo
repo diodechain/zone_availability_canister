@@ -63,7 +63,8 @@ persistent actor CanisterFactory {
       canister_id = canisterId;
     });
     let cycles_balance = status.cycles;
-    let target_cycles = 700_000_000_000;
+    // 700 billion is usually too short for upgrades, so we set it to 800 billion
+    let target_cycles = 800_000_000_000;
     if (cycles_balance >= target_cycles) {
       return #err(#other("Canister has enough cycles"));
     };
@@ -136,9 +137,12 @@ persistent actor CanisterFactory {
       throw Error.reject("Unauthorized access. Caller is not an admin.");
     };
 
+    ignore await cycles_manager_transferCyclesToCanister(canisterId);
+    
     await IC.ic.stop_canister({
       canister_id = canisterId;
     });
+
 
     await IC.ic.install_code({
       canister_id = canisterId;
@@ -200,7 +204,7 @@ persistent actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    111;
+    112;
   };
 
   public shared func get_stable_size() : async Nat32 {
