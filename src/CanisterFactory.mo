@@ -78,10 +78,12 @@ persistent actor CanisterFactory {
 
   // Creating a new zone availability canister
   // This adds a canister with a 1 trillion cycles allowed per 24 hours cycles quota
+  // call_token: when set, canister uses RoleWithCallToken on the Drive (for Oasis); omit for legacy.
   public shared func create_zone_availability_canister(
     zone_id : Text,
     rpc_host : Text,
     rpc_path : Text,
+    call_token : ?Blob,
   ) : async Principal {
 
     // 1 trillion cycles is ~ 1.30 USD
@@ -90,6 +92,7 @@ persistent actor CanisterFactory {
       rpc_host;
       rpc_path;
       cycles_requester_id = Principal.fromActor(CanisterFactory);
+      call_token;
     });
 
     let principal = Principal.fromActor(canister);

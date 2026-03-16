@@ -58,6 +58,7 @@ defmodule Test do
             rpc_host = "prenet.diode.io:8443";
             rpc_path = "/";
             cycles_requester_id = principal "be2us-64aaa-aaaaa-qaabq-cai";
+            call_token = null;
           }
           """
         ])

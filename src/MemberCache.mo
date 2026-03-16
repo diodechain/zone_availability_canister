@@ -15,6 +15,7 @@ module MemberCache {
     rpc_path : Text;
     zone_members : Map.Map<Blob, CacheEntry>;
     transform_function : Oracle.TransformFunction;
+    call_token : ?Blob;
   };
 
   func context(cache : Cache) : Oracle.Context {
@@ -31,13 +32,39 @@ module MemberCache {
     timestamp : Int;
   };
 
-  public func new(zone_id : Text, rpc_host : Text, rpc_path : Text, transform_function : Oracle.TransformFunction) : Cache {
+  public func new(
+    zone_id : Text,
+    rpc_host : Text,
+    rpc_path : Text,
+    transform_function : Oracle.TransformFunction,
+    call_token : ?Blob,
+  ) : Cache {
     {
       zone_id = zone_id;
       rpc_host = rpc_host;
       rpc_path = rpc_path;
       transform_function = transform_function;
       zone_members = Map.new();
+      call_token = call_token;
+    };
+  };
+
+  func get_zone_role(cache : Cache, member_address_hex : Text) : async Nat {
+    switch (cache.call_token) {
+      case (null) {
+        await Oracle.get_zone_member_role(context(cache), cache.zone_id, member_address_hex);
+      };
+      case (?token) {
+        if (token.size() != 32) {
+          throw Error.reject("Invalid call token size: " # debug_show (token.size()));
+        };
+        await Oracle.get_zone_member_role_with_token(
+          context(cache),
+          cache.zone_id,
+          token,
+          member_address_hex,
+        );
+      };
     };
   };
 
@@ -61,7 +88,7 @@ module MemberCache {
       throw Error.reject("Member is not in identity");
     };
 
-    let role = await Oracle.get_zone_member_role(context(cache), cache.zone_id, identity_contract_hex);
+    let role = await get_zone_role(cache, identity_contract_hex);
     return set_identity_member(cache, member, role, ?identity_contract);
   };
 
@@ -74,7 +101,7 @@ module MemberCache {
     let address = Eth.addressFromPublicKey(member_pubkey);
     let address_hex = Base16.encode(address);
 
-    let role = await Oracle.get_zone_member_role(context(cache), cache.zone_id, address_hex);
+    let role = await get_zone_role(cache, address_hex);
     return set_identity_member(cache, member, role, null);
   };
 

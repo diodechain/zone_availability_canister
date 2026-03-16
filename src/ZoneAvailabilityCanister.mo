@@ -24,6 +24,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     rpc_host : Text;
     rpc_path : Text;
     cycles_requester_id : Principal;
+    call_token : ?Blob;
   }
 ) = this {
   public shared query func oracle_transform_function(args : Types.TransformArgs) : async Types.HttpResponsePayload {
@@ -31,7 +32,14 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   var dm : DiodeMessages.MessageStore = DiodeMessages.new();
-  var zone_members : MemberCache.Cache = MemberCache.new(_args.zone_id, _args.rpc_host, _args.rpc_path, oracle_transform_function);
+  var zone_members : MemberCache.Cache =
+    MemberCache.new(
+      _args.zone_id,
+      _args.rpc_host,
+      _args.rpc_path,
+      oracle_transform_function,
+      _args.call_token,
+    );
   var installation_id : Int = Time.now();
   var meta_data : MetaData.MetaData = MetaData.new();
   var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);

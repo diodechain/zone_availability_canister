@@ -52,13 +52,20 @@ case System.argv() do
           {"prenet.diode.io:8443", "/"}
       end
 
-    type = %{zone_id: :text, rpc_host: :text, rpc_path: :text, cycles_requester_id: :principal}
+    type = %{
+      zone_id: :text,
+      rpc_host: :text,
+      rpc_path: :text,
+      cycles_requester_id: :principal,
+      call_token: {:opt, :blob}
+    }
 
     values = %{
       zone_id: zone_id,
       rpc_host: rpc_host,
       rpc_path: rpc_path,
-      cycles_requester_id: ICPAgent.decode_textual(factory)
+      cycles_requester_id: ICPAgent.decode_textual(factory),
+      call_token: nil
     }
 
     args = Candid.encode_parameters([{:record, type}], [values])

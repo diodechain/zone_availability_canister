@@ -64,6 +64,23 @@ module DiodeOracle {
     create_request(context, zone_id, call);
   };
 
+  // RoleWithCallToken(bytes32,address) selector 0xba8f89b4; calldata: selector + bytes32 token + padded address
+  public func create_member_role_with_token_request(
+    context : Context,
+    zone_id : Text,
+    call_token : Blob,
+    member_address : Text,
+  ) : Types.HttpRequestArgs {
+    let token_hex = Base16.encode(Blob.toArray(call_token));
+    let addr = if (Text.size(member_address) >= 2 and Text.substring(member_address, 0, 2) == "0x") {
+      Text.substring(member_address, 2, Text.size(member_address) - 2);
+    } else {
+      member_address;
+    };
+    let call = "0xba8f89b4" # token_hex # "000000000000000000000000" # addr;
+    create_request(context, zone_id, call);
+  };
+
   public func create_identity_member_request(context : Context, identity_contract_address : Text, member_address : Text) : Types.HttpRequestArgs {
     // IsMember(address)
     let call = "0x264560d6000000000000000000000000" # member_address;
@@ -122,6 +139,20 @@ module DiodeOracle {
 
   public func get_zone_member_role(context : Context, zone_id : Text, member_address : Text) : async Nat {
     let request = create_member_role_request(context, zone_id, member_address);
+    let response = await (with cycles = 20_949_972_000) http_actor().http_request(request);
+    switch (process_http_response(response)) {
+      case (null) { 0 };
+      case (?blob) { blob_to_nat(blob) };
+    };
+  };
+
+  public func get_zone_member_role_with_token(
+    context : Context,
+    zone_id : Text,
+    call_token : Blob,
+    member_address : Text,
+  ) : async Nat {
+    let request = create_member_role_with_token_request(context, zone_id, call_token, member_address);
     let response = await (with cycles = 20_949_972_000) http_actor().http_request(request);
     switch (process_http_response(response)) {
       case (null) { 0 };

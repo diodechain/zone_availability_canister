@@ -74,14 +74,16 @@ defmodule Factory do
       zone_id: :text,
       rpc_host: :text,
       rpc_path: :text,
-      cycles_requester_id: :principal
+      cycles_requester_id: :principal,
+      call_token: {:opt, :blob}
     }
 
     values = %{
       zone_id: zone_id,
       rpc_host: rpc_host,
       rpc_path: rpc_path,
-      cycles_requester_id: ICPAgent.decode_textual(id())
+      cycles_requester_id: ICPAgent.decode_textual(id()),
+      call_token: nil
     }
 
     args = Candid.encode_parameters([{:record, type}], [values])
