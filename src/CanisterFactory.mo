@@ -76,10 +76,20 @@ persistent actor CanisterFactory {
     });
   };
 
-  // Creating a new zone availability canister
-  // This adds a canister with a 1 trillion cycles allowed per 24 hours cycles quota
-  // call_token: when set, canister uses RoleWithCallToken on the Drive (for Oasis); omit for legacy.
+  // Creating a new zone availability canister (3 params, backward compatible).
+  // Calls create_zone_availability_canister_with_token with call_token = null.
   public shared func create_zone_availability_canister(
+    zone_id : Text,
+    rpc_host : Text,
+    rpc_path : Text,
+  ) : async Principal {
+    await create_zone_availability_canister_with_token(zone_id, rpc_host, rpc_path, null);
+  };
+
+  // Creating a new zone availability canister with optional call token.
+  // This adds a canister with a 1 trillion cycles allowed per 24 hours cycles quota.
+  // call_token: when set, canister uses RoleWithCallToken on the Drive (for Oasis); null for legacy.
+  public shared func create_zone_availability_canister_with_token(
     zone_id : Text,
     rpc_host : Text,
     rpc_path : Text,

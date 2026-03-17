@@ -65,19 +65,15 @@ module DiodeOracle {
   };
 
   // RoleWithCallToken(bytes32,address) selector 0xba8f89b4; calldata: selector + bytes32 token + padded address
+  // member_address should be 40 hex chars (no 0x prefix) to match ABI encoding
   public func create_member_role_with_token_request(
     context : Context,
     zone_id : Text,
     call_token : Blob,
     member_address : Text,
   ) : Types.HttpRequestArgs {
-    let token_hex = Base16.encode(Blob.toArray(call_token));
-    let addr = if (Text.size(member_address) >= 2 and Text.substring(member_address, 0, 2) == "0x") {
-      Text.substring(member_address, 2, Text.size(member_address) - 2);
-    } else {
-      member_address;
-    };
-    let call = "0xba8f89b4" # token_hex # "000000000000000000000000" # addr;
+    let token_hex = Base16.encode(call_token);
+    let call = "0xba8f89b4" # token_hex # "000000000000000000000000" # member_address;
     create_request(context, zone_id, call);
   };
 
