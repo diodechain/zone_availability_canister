@@ -63,8 +63,8 @@ persistent actor CanisterFactory {
       canister_id = canisterId;
     });
     let cycles_balance = status.cycles;
-    // 700 billion is usually too short for upgrades, so we set it to 800 billion
-    let target_cycles = 800_000_000_000;
+    // Since storage cost doubling need 1_500 billion for upgrades
+    let target_cycles = 1_500_000_000_000;
     if (cycles_balance >= target_cycles) {
       return #err(#other("Canister has enough cycles"));
     };

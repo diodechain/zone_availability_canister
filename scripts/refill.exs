@@ -4,8 +4,6 @@ Code.eval_file("scripts/factory.ex")
 
 case System.argv() do
   [canister_id] ->
-    canister_id = ICPAgent.decode_textual(canister_id)
-
     Factory.refill(canister_id)
     |> IO.inspect()
 

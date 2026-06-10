@@ -54,7 +54,7 @@ Task.async_stream(
             [version] -> version
           end
 
-        if is_integer(version) and version < 412 do
+        if is_integer(version) and version < 413 do
           [zone_id] = ICPAgent.query(child, w, "get_zone_id")
           account = DiodeClient.Base16.decode(zone_id)
 

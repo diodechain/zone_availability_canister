@@ -44,7 +44,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   var meta_data : MetaData.MetaData = MetaData.new();
   var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);
   var file_system : DiodeFileSystem.FileSystem = DiodeFileSystem.new(128_000_000);
-  let version : Nat = 412;
+  let version : Nat = 413;
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below .7 trillion cycles, topup by .5 trillion (~65 cents)
@@ -137,7 +137,6 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
    */
 
   public shared (msg) func add_message(key_id : Blob, ciphertext : Blob) : async Result.Result<Nat32, Text> {
-    ignore await request_topup_if_low();
     assert_membership(msg.caller);
 
     let hash = Sha256.fromBlob(#sha256, ciphertext);
@@ -145,7 +144,6 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public shared (msg) func add_messages(messages : [(Blob, Blob)]) : async Result.Result<[Nat32], Text> {
-    ignore await request_topup_if_low();
     assert_membership(msg.caller);
     var message_ids : [Nat32] = [];
 
@@ -212,12 +210,10 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public func update_role(public_key : Blob) : async Nat {
-    ignore await request_topup_if_low();
     await MemberCache.update_member(zone_members, public_key);
   };
 
   public func update_identity_role(public_key : Blob, identity_contract_address : Blob) : async Nat {
-    ignore await request_topup_if_low();
     await MemberCache.update_identity_member(zone_members, public_key, identity_contract_address);
   };
 
@@ -235,7 +231,6 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
 
   public shared (msg) func set_public_and_protected_key(public_key : Blob, vet_protected_key : Blob) {
     assert_admin(msg.caller);
-    ignore await request_topup_if_low();
     MetaData.set_public_and_protected_key(meta_data, public_key, vet_protected_key);
   };
 
@@ -256,13 +251,11 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
 
   public shared (msg) func set_data_entry(key : Nat8, data : Blob) {
     assert_admin(msg.caller);
-    ignore await request_topup_if_low();
     MetaData.set_data_entry(meta_data, key, data);
   };
 
   public shared (msg) func delete_data_entry(key : Nat8) {
     assert_admin(msg.caller);
-    ignore await request_topup_if_low();
     MetaData.delete_data_entry(meta_data, key);
   };
 
@@ -273,7 +266,6 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
 
   public shared (msg) func derive_vet_protector_key(transport_public_key : Blob, target_public_key : Blob) : async ?Blob {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     await MetaData.derive_vet_protector_key(meta_data, transport_public_key, target_public_key);
   };
 
@@ -283,13 +275,11 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
 
   public shared (msg) func write_attachment(identity_hash : Blob, data : Blob) : async Result.Result<(), Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeAttachments.write_attachment(attachments, identity_hash, data);
   };
 
   public shared (msg) func delete_attachment(identity_hash : Blob) {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeAttachments.delete_attachment(attachments, identity_hash);
   };
 
@@ -312,19 +302,16 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
 
   public shared (msg) func allocate_attachment(identity_hash : Blob, size : Nat64) : async Result.Result<Nat64, Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeAttachments.allocate_attachment(attachments, identity_hash, size);
   };
 
   public shared (msg) func write_attachment_chunk(identity_hash : Blob, offset : Nat64, data : Blob) : async Result.Result<(), Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeAttachments.write_attachment_chunk(attachments, identity_hash, offset, data);
   };
 
   public shared (msg) func finalize_attachment(identity_hash : Blob) : async Result.Result<(), Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeAttachments.finalize_attachment(attachments, identity_hash);
   };
 
@@ -351,37 +338,31 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
 
   public shared (msg) func create_directory(directory_id : Blob, name_hash : Blob, parent_id : ?Blob) : async Result.Result<(), Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeFileSystem.create_directory(file_system, directory_id, name_hash, parent_id);
   };
 
   public shared (msg) func write_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, ciphertext : Blob) : async Result.Result<Nat, Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeFileSystem.write_file(file_system, directory_id, name_hash, content_hash, ciphertext);
   };
 
   public shared (msg) func delete_file(file_id : Nat) : async Result.Result<(), Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeFileSystem.delete_file(file_system, file_id);
   };
 
   public shared (msg) func allocate_file(directory_id : Blob, name_hash : Blob, content_hash : Blob, size : Nat64) : async Result.Result<DiodeFileSystem.File, Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeFileSystem.allocate_file(file_system, directory_id, name_hash, content_hash, size);
   };
 
   public shared (msg) func write_file_chunk(content_hash : Blob, chunk_offset : Nat64, chunk : Blob) : async Result.Result<(), Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeFileSystem.write_file_chunk(file_system, content_hash, chunk_offset, chunk);
   };
 
   public shared (msg) func finalize_file(content_hash : Blob) : async Result.Result<(), Text> {
     assert_membership(msg.caller);
-    ignore await request_topup_if_low();
     DiodeFileSystem.finalize_file(file_system, content_hash);
   };
 
@@ -440,7 +421,6 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
 
   public shared (msg) func set_file_system_max_storage(max_storage : Nat64) {
     assert_admin(msg.caller);
-    ignore await request_topup_if_low();
     DiodeFileSystem.set_max_storage(file_system, max_storage);
   };
 
