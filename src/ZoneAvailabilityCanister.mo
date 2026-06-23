@@ -46,7 +46,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   var meta_data : MetaData.MetaData = MetaData.new();
   var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);
   var file_system : DiodeFileSystem.FileSystem = DiodeFileSystem.new(128_000_000);
-  transient let version : Nat = 413;
+  transient let version : Nat = 414;
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below .7 trillion cycles, topup by .5 trillion (~65 cents)
