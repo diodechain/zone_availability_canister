@@ -1118,6 +1118,67 @@ persistent actor {
         );
 
         await test(
+          "Should remove blob_index_map entry and allow re-upload after deleting all dedup file_ids",
+          func() : async () {
+            let fs = DiodeFileSystem.new(1000);
+            let directory_id = make_blob(32, 1);
+            let name1 = make_blob(32, 2);
+            let name2 = make_blob(32, 3);
+            let name3 = make_blob(32, 4);
+            let content_hash = make_blob(32, 5);
+            let corrupt_ciphertext = Blob.fromArray([9, 9, 9, 9, 9]);
+            let repaired_ciphertext = Blob.fromArray([1, 2, 3, 4, 5]);
+
+            assert isOk(DiodeFileSystem.create_directory(fs, directory_id, name1, ?DiodeFileSystem.ROOT_DIRECTORY_ID));
+
+            assert isOkNat(DiodeFileSystem.write_file(fs, directory_id, name1, content_hash, corrupt_ciphertext));
+            assert isOkNat(DiodeFileSystem.write_file(fs, directory_id, name2, content_hash, corrupt_ciphertext));
+
+            assert DiodeFileSystem.has_blob_index_entry(fs, content_hash);
+
+            switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
+              case (#ok(read_data)) {
+                assert read_data == corrupt_ciphertext;
+              };
+              case (#err(_)) { assert false };
+            };
+
+            let files_before = DiodeFileSystem.get_files_in_directory(fs, directory_id);
+            assert files_before.size() == 2;
+
+            switch (DiodeFileSystem.delete_file(fs, files_before[0].id)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false };
+            };
+
+            assert DiodeFileSystem.has_blob_index_entry(fs, content_hash);
+
+            switch (DiodeFileSystem.delete_file(fs, files_before[1].id)) {
+              case (#ok()) {};
+              case (#err(_)) { assert false };
+            };
+
+            switch (DiodeFileSystem.get_file_by_hash(fs, content_hash)) {
+              case (#ok(_)) { assert false };
+              case (#err(err)) { assert err == "file not found" };
+            };
+
+            // Without removing the blob_index_map entry, a re-upload would dedup to the
+            // corrupt finalized blob and skip rewriting ciphertext.
+            assert not DiodeFileSystem.has_blob_index_entry(fs, content_hash);
+
+            assert isOkNat(DiodeFileSystem.write_file(fs, directory_id, name3, content_hash, repaired_ciphertext));
+
+            switch (DiodeFileSystem.read_file_chunk(fs, content_hash, 0, 5)) {
+              case (#ok(read_data)) {
+                assert read_data == repaired_ciphertext;
+              };
+              case (#err(_)) { assert false };
+            };
+          },
+        );
+
+        await test(
           "Should handle ring buffer cleanup with content deduplication correctly",
           func() : async () {
             // Create filesystem with small capacity to trigger ring buffer cleanup

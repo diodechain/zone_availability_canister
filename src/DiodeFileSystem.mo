@@ -250,14 +250,20 @@ module DiodeFileSystem {
         // Remove from file index maps
         Map.delete<Nat, FileInfo>(fs.global_files, Map.nhash, file_id);
         let new_file_ids = Array.filter<Nat>(blob_info.file_ids, func(fid : Nat) : Bool { fid != file_id });
-        let new_blob_info : BlobInfo = {
-          file_ids = new_file_ids;
-          content_hash = blob_info.content_hash;
-          offset = blob_info.offset;
-          size = blob_info.size;
-          finalized = blob_info.finalized;
+
+        if (new_file_ids.size() == 0) {
+          Map.delete<Blob, BlobInfo>(fs.blob_index_map, Map.bhash, file_info.content_hash);
+        } else {
+          let new_blob_info : BlobInfo = {
+            file_ids = new_file_ids;
+            content_hash = blob_info.content_hash;
+            offset = blob_info.offset;
+            size = blob_info.size;
+            finalized = blob_info.finalized;
+          };
+          Map.set<Blob, BlobInfo>(fs.blob_index_map, Map.bhash, file_info.content_hash, new_blob_info);
         };
-        Map.set<Blob, BlobInfo>(fs.blob_index_map, Map.bhash, file_info.content_hash, new_blob_info);
+
         return #ok();
       };
     };
@@ -651,5 +657,12 @@ module DiodeFileSystem {
 
   public func get_directory_count(fs : FileSystem) : Nat {
     return Map.size(fs.directories);
+  };
+
+  public func has_blob_index_entry(fs : FileSystem, content_hash : Blob) : Bool {
+    switch (Map.get<Blob, BlobInfo>(fs.blob_index_map, Map.bhash, content_hash)) {
+      case (null) { false };
+      case (?_) { true };
+    };
   };
 };
