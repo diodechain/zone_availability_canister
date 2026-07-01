@@ -51,7 +51,7 @@ w = Factory.wallet()
 retry = fn child, fun ->
   with {:error, reason} <- fun.() do
     is_stopped = String.contains?(inspect(reason), "is stopped")
-    is_out_of_cycles = String.contains?(inspect(reason), "out of cycles")
+    is_out_of_cycles = String.contains?(inspect(reason), "out of cycles") || String.contains?(inspect(reason), "frozen")
 
     if is_stopped or is_out_of_cycles do
       Factory.refill(child) |> IO.inspect(label: "Refill #{child}")
