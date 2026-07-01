@@ -1,20 +1,47 @@
 #!/usr/bin/env elixir
-Mix.install([{:icp_agent, "~> 0.1.8"}, :candid, {:diode_client, "~> 1.3.5"}])
+Mix.install([{:icp_agent, "~> 0.1.9"}, :candid, {:diode_client, "~> 1.4.9"}])
 Code.eval_file("scripts/factory.ex")
 :erlang.system_flag(:backtrace_depth, 30)
 Logger.configure(level: :info)
 
-children = Factory.children() |> Enum.with_index()
+{opts, _args, invalid} =
+  OptionParser.parse(System.argv(),
+    strict: [upgrade: :boolean, canister: :string, index: :integer]
+  )
 
-{upgrade?, wasm} =
-  if "--upgrade" in System.argv() do
+if invalid != [] do
+  IO.puts(:stderr, "Invalid options: #{inspect(invalid)}")
+  System.halt(1)
+end
+
+upgrade? = Keyword.get(opts, :upgrade, false)
+
+children =
+  case Keyword.get(opts, :canister) do
+    nil ->
+      Factory.children() |> Enum.shuffle() |> Enum.with_index()
+
+    canister_id ->
+      [{canister_id, Keyword.get(opts, :index, 0)}]
+  end
+
+{upgrade?, wasms} =
+  if upgrade? do
     DiodeClient.interface_add()
-    {_, 0} = System.cmd("dfx", ["build", "--check", "ZoneAvailabilityCanister"])
 
-    wasm =
-      File.read!("./.dfx/local/canisters/ZoneAvailabilityCanister/ZoneAvailabilityCanister.wasm")
+    build_wasm = fn name ->
+      {_, 0} = System.cmd("dfx", ["build", "--check", name])
+      File.read!(".dfx/local/canisters/#{name}/#{name}.wasm")
+    end
 
-    {true, wasm}
+    {
+      true,
+      %{
+        cache: build_wasm.("ZoneAvailabilityCanister"),
+        version: build_wasm.("ZoneAvailabilityCanisterVersion"),
+        plain: build_wasm.("ZoneAvailabilityCanisterPlain")
+      }
+    }
   else
     {false, nil}
   end
@@ -27,9 +54,10 @@ retry = fn child, fun ->
     is_out_of_cycles = String.contains?(inspect(reason), "out of cycles")
 
     if is_stopped or is_out_of_cycles do
-      Factory.refill(child) |> IO.inspect(label: "Refill")
+      Factory.refill(child) |> IO.inspect(label: "Refill #{child}")
+
       if is_stopped do
-        Factory.start_canister(child) |> IO.inspect(label: "Start")
+        Factory.start_canister(child) |> IO.inspect(label: "Start #{child}")
       end
 
       fun.()
@@ -39,22 +67,80 @@ retry = fn child, fun ->
   end
 end
 
-Task.async_stream(
+memory_incompatible? = fn reason ->
+  String.contains?(inspect(reason), "Memory-incompatible")
+end
+
+upgrade_canister = fn child, chain, zone_id, version, wasms ->
+  strategies =
+    case version do
+      412 -> [:cache, :version, :plain]
+      413 -> [:plain, :version, :cache]
+      _ -> [:cache, :plain, :version]
+    end
+
+  Enum.reduce_while(strategies, {:error, :no_strategy}, fn strategy, _acc ->
+    wasm = Map.fetch!(wasms, strategy)
+
+    case retry.(child, fn -> Factory.upgrade(child, chain, zone_id, wasm) end) do
+      {:error, reason} = error ->
+        if memory_incompatible?.(reason) do
+          {:cont, error}
+        else
+          {:halt, error}
+        end
+
+      ok ->
+        {:halt, ok}
+    end
+  end)
+end
+
+version_cache =
+  :ets.file2tab(~c"./scripts/version_cache.ets", [])
+  |> case do
+    {:ok, table} -> table
+    {:error, {:read_error, _}} -> :ets.new(:version_cache, [:set, :public, :named_table])
+  end
+
+:ok = :ets.tab2file(version_cache, ~c"./scripts/version_cache.ets")
+
+Task.Supervisor.start_link(name: MyApp.TaskSupervisor)
+
+Task.Supervisor.async_stream_nolink(
+  MyApp.TaskSupervisor,
   children,
   fn {child, index} ->
     if rem(index, 10) == 0 do
-      IO.puts("Processing #{index} - #{child}")
+      ret = :ets.tab2file(version_cache, ~c"./scripts/version_cache.ets")
+      IO.puts("Processing #{index} - #{child} - #{inspect(ret)}")
     end
+
+    {version, cached?} =
+      :ets.lookup(version_cache, child)
+      |> case do
+        [{_, version}] when is_integer(version) ->
+          {version, true}
+
+        _ ->
+          case retry.(child, fn -> ICPAgent.query(child, w, "get_version") end) do
+            {:error, reason} -> {"error: #{inspect(reason)}", false}
+            [version] -> {version, false}
+          end
+      end
+
+    :ets.insert(version_cache, {child, version})
 
     action =
       if upgrade? do
-        version =
-          case retry.(child, fn -> ICPAgent.query(child, w, "get_version") end) do
-            {:error, reason} -> "error: #{inspect(reason)}"
-            [version] -> version
-          end
+        if is_integer(version) and version < 414 do
+          [version] =
+            if cached? do
+              retry.(child, fn -> ICPAgent.query(child, w, "get_version") end)
+            else
+              [version]
+            end
 
-        if is_integer(version) and version < 413 do
           [zone_id] = ICPAgent.query(child, w, "get_zone_id")
           account = DiodeClient.Base16.decode(zone_id)
 
@@ -69,12 +155,13 @@ Task.async_stream(
           if chain == nil do
             "#{version} - #{zone_id} -> not found on-chain"
           else
-            retry.(child, fn -> Factory.upgrade(child, chain, zone_id, wasm) end)
+            upgrade_canister.(child, chain, zone_id, version, wasms)
             |> case do
               {:error, reason} ->
                 "#{version} - #{zone_id} --> error: #{inspect(reason)}"
 
               _ ->
+                :ets.insert(version_cache, {child, 414})
                 "#{version} - #{zone_id} --> upgraded"
             end
           end
@@ -86,7 +173,7 @@ Task.async_stream(
           end
         end
       else
-        "none"
+        "#{version}"
       end
 
     if not String.contains?(action, "already upgraded") do
@@ -97,3 +184,5 @@ Task.async_stream(
   max_concurrency: 4
 )
 |> Stream.run()
+
+:ets.tab2file(version_cache, ~c"./scripts/version_cache.ets")
