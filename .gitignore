@@ -3,3 +3,15 @@
 src/declarations
 *.key
 *.pem
+
+# Generated canister data / cache from scripts/list_canisters.exs
+canisters.csv
+list.tsv
+scripts/canisters.json
+scripts/version_cache.ets
+
+# Local secrets
+diode_client_interface
+
+# Local docs
+docs/dfinity_milestones2.pdf
