@@ -11,6 +11,16 @@
       "main": "src/ZoneAvailabilityCanister.mo",
       "args": "--enhanced-orthogonal-persistence"
     },
+    "ZoneAvailabilityCanisterPlain": {
+      "type": "motoko",
+      "main": "src/ZoneAvailabilityCanisterPlain.mo",
+      "args": "--enhanced-orthogonal-persistence"
+    },
+    "ZoneAvailabilityCanisterVersion": {
+      "type": "motoko",
+      "main": "src/ZoneAvailabilityCanisterVersion.mo",
+      "args": "--enhanced-orthogonal-persistence"
+    },
     "VetKeyTest": {
       "type": "motoko",
       "main": "src/VetKeyTest.mo"
