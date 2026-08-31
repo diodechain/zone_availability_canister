@@ -6,9 +6,11 @@ import ZoneAvailabilityMigration "./ZoneAvailabilityMigration";
 module ZoneAvailabilityVersionMigration {
   public type CacheV414 = ZoneAvailabilityMigration.CacheV414;
 
-  public func migration(old : {
-    var zone_members : CacheV414;
-  }) : {
+  public func migration(
+    old : {
+      var zone_members : CacheV414;
+    }
+  ) : {
     var zone_members : MemberCache.Cache;
   } {
     ZoneAvailabilityMigration.migration(old);

@@ -151,11 +151,10 @@ persistent actor CanisterFactory {
     };
 
     ignore await cycles_manager_transferCyclesToCanister(canisterId);
-    
+
     await IC.ic.stop_canister({
       canister_id = canisterId;
     });
-
 
     await IC.ic.install_code({
       canister_id = canisterId;

@@ -36,14 +36,13 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   var dm : DiodeMessages.MessageStore = DiodeMessages.new();
-  var zone_members : MemberCache.Cache =
-    MemberCache.new(
-      _args.zone_id,
-      _args.rpc_host,
-      _args.rpc_path,
-      oracle_transform_function,
-      _args.call_token,
-    );
+  var zone_members : MemberCache.Cache = MemberCache.new(
+    _args.zone_id,
+    _args.rpc_host,
+    _args.rpc_path,
+    oracle_transform_function,
+    _args.call_token,
+  );
   var installation_id : Int = Time.now();
   var meta_data : MetaData.MetaData = MetaData.new();
   var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);
@@ -248,9 +247,12 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   };
 
   public query func get_data_entry_batch(keys : [Nat8]) : async [?MetaData.DataEntry] {
-    Array.map<Nat8, ?MetaData.DataEntry>(keys, func(key : Nat8) : ?MetaData.DataEntry {
-      MetaData.get_data_entry(meta_data, key);
-    });
+    Array.map<Nat8, ?MetaData.DataEntry>(
+      keys,
+      func(key : Nat8) : ?MetaData.DataEntry {
+        MetaData.get_data_entry(meta_data, key);
+      },
+    );
   };
 
   public shared (msg) func set_data_entry(key : Nat8, data : Blob) {
@@ -387,9 +389,12 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
 
   public query (msg) func get_file_by_id_batch(file_ids : [Nat]) : async [?DiodeFileSystem.File] {
     assert_membership(msg.caller);
-    Array.map<Nat, ?DiodeFileSystem.File>(file_ids, func(file_id : Nat) : ?DiodeFileSystem.File {
-      DiodeFileSystem.get_file_by_id(file_system, file_id);
-    });
+    Array.map<Nat, ?DiodeFileSystem.File>(
+      file_ids,
+      func(file_id : Nat) : ?DiodeFileSystem.File {
+        DiodeFileSystem.get_file_by_id(file_system, file_id);
+      },
+    );
   };
 
   public query (msg) func get_directory(directory_id : Blob) : async ?DiodeFileSystem.Directory {

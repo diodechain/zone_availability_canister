@@ -40,9 +40,11 @@ module ZoneAvailabilityMigration {
     };
   };
 
-  public func migration(old : {
-    var zone_members : CacheV414;
-  }) : {
+  public func migration(
+    old : {
+      var zone_members : CacheV414;
+    }
+  ) : {
     var zone_members : MemberCache.Cache;
   } {
     {

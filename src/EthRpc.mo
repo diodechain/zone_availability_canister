@@ -57,7 +57,11 @@ module EthRpc {
         };
         message : Text;
       };
-      #InvalidHttpJsonRpcResponse : { status : Nat16; body : Text; parsingError : ?Text };
+      #InvalidHttpJsonRpcResponse : {
+        status : Nat16;
+        body : Text;
+        parsingError : ?Text;
+      };
     };
   };
 
