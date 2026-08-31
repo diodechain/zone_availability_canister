@@ -1,0 +1,17 @@
+{
+  "name": "Diode Zone Availability Canister",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "dfx replica",
+      "command": "dfx start --clean",
+      "description": "Local Internet Computer replica (http://127.0.0.1:4943). Deploy canisters with `dfx deploy`."
+    }
+  ],
+  "ports": [
+    {
+      "name": "dfx replica",
+      "port": 4943
+    }
+  ]
+}
