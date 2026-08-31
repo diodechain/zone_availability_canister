@@ -12,8 +12,13 @@ defmodule Factory do
     |> DiodeClient.Wallet.from_privkey()
   end
 
+  # Queries (children list, get_version, etc.) do not need the admin key.
+  def query_wallet() do
+    DiodeClient.Wallet.new()
+  end
+
   def children() do
-    ICPAgent.query(id(), wallet(), "get_cycles_manager_children", [], [], {:vec, :principal})
+    ICPAgent.query(id(), query_wallet(), "get_cycles_manager_children", [], [], {:vec, :principal})
     |> Enum.map(&ICPAgent.encode_textual/1)
   end
 
@@ -108,7 +113,7 @@ defmodule Factory do
          ChainFusion: {:record, [network: {:variant, [BaseMainnet: :null]}]}
        ]}
 
-    ICPAgent.query(canister_id, wallet(), "get_rpc_backend", [], [], backend_type)
+    ICPAgent.query(canister_id, query_wallet(), "get_rpc_backend", [], [], backend_type)
   end
 
   def update_aggregate_quota_settings(max_amount, duration_in_seconds \\ nil) do

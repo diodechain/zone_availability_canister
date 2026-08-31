@@ -1,5 +1,5 @@
 #!/usr/bin/env elixir
-Mix.install([{:icp_agent, "~> 0.1.9"}, :candid, {:diode_client, "~> 1.4.9"}])
+Mix.install([{:icp_agent, "~> 0.1.9"}, :candid, {:diode_client, "~> 1.4.12"}])
 Code.eval_file("scripts/factory.ex")
 :erlang.system_flag(:backtrace_depth, 30)
 Logger.configure(level: :info)
@@ -46,7 +46,8 @@ children =
     {false, nil}
   end
 
-w = Factory.wallet()
+# Listing / version queries are public; admin key only required for --upgrade.
+w = if upgrade?, do: Factory.wallet(), else: Factory.query_wallet()
 
 retry = fn child, fun ->
   with {:error, reason} <- fun.() do

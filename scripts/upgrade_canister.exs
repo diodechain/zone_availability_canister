@@ -1,5 +1,5 @@
 #!/usr/bin/env elixir
-Mix.install([:icp_agent, :candid, {:diode_client, "~> 1.4.9"}])
+Mix.install([:icp_agent, :candid, {:diode_client, "~> 1.4.12"}])
 Code.eval_file("scripts/factory.ex")
 :erlang.system_flag(:backtrace_depth, 30)
 
