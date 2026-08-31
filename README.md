@@ -55,6 +55,15 @@ $ . ./install_deps.sh
 $ mops test
 ```
 
+Cycle consumption for ZAC **create** (factory actor-class path) and **upgrade**
+(`upgrade_code`: stop + `#upgrade` with `wasm_memory_persistence=#keep` + start, v414→v415):
+
+```shell
+$ python3 test/cycles_create_upgrade.py
+```
+
+Requires the `pocket-ic` binary from mops (`mops.toml` toolchain) and `pip install pocket-ic`.
+
 ### Local Development & Debugging
 
 ```shell
