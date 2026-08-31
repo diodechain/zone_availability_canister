@@ -64,14 +64,35 @@ $ dfx deploy
 
 ### Production Upgrade
 
+Deploy the factory first so new ZACs always spawn wasm **v415**, then upgrade existing children.
+
 ```shell
+# 1) Deploy updated CanisterFactory (embeds new ZoneAvailabilityCanister actor class)
 dfx canister --ic stop CanisterFactory
 dfx deploy --ic CanisterFactory
 dfx canister --ic start CanisterFactory
+
+# 2) Fleet upgrade (Moonbeam→Base migration runs inside Motoko upgrade migration)
+./scripts/list_canisters.exs --upgrade
 ```
 
-This upgrades a specific ZAC (only possible as long as the Factory is still a controller)
+Upgrade a specific ZAC (only possible as long as the Factory is still a controller):
 
 ```shell
 $ ./scripts/upgrade_canister.exs ic avjhi-uqaaa-aaaao-qj4ga-cai
 ```
+
+#### v415: Moonbeam → Base + Chain Fusion
+
+On upgrade to ZAC **v415**:
+
+- Embedded `MoonbeamZoneMap` remaps known Moonbeam `zone_id` values to Base and switches the EVM backend to ICP **Chain Fusion** (`#BaseMainnet` via EVM RPC canister `7hfb6-caaaa-aaaar-qadga-cai`).
+- Member role cache is cleared for remapped zones so roles re-fetch on Base.
+- Existing Base canisters that still used HTTPS `mainnet.base.org` also switch to Chain Fusion; member cache is kept.
+- Diode / Oasis continue to use HTTPS outcalls.
+
+**Owner-only `rebind(zone_id, backend)`** is for *future* RPC/backend changes (not the initial Moonbeam→Base fleet move). Callers must have role ≥ 500. Query `get_rpc_backend` to verify.
+
+Create candid stays `(zone_id, rpc_host, rpc_path[, call_token])` for ddrive compatibility; factory/ZAC map `mainnet.base.org` → Chain Fusion internally.
+
+Keep `src/MoonbeamZoneMap.mo` in sync with ddrive `Model.MoonbeamZoneMap` when the restore CSV changes.

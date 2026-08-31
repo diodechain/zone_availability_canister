@@ -3,6 +3,8 @@ defmodule Factory do
     "dgnum-qiaaa-aaaao-qj3ta-cai"
   end
 
+  def target_zac_version(), do: 415
+
   def wallet() do
     File.read!("diode_glmr.key")
     |> String.trim()
@@ -17,19 +19,7 @@ defmodule Factory do
 
   def refill(canister_id) do
     canister_id = ICPAgent.decode_textual(canister_id)
-    # public type TransferCyclesResult = Result.Result<Nat, TransferCyclesError>;
-    # public type TransferCyclesError = {
-    #   // The sending canister does not have enough cycles to send.
-    #   #insufficient_cycles_available;
-    #   // The requesting canister has asked for too few cycles.
-    #   #too_few_cycles_requested;
-    #   // The cycles manager has reached its aggregate quota.
-    #   #aggregate_quota_reached;
-    #   // The canister has reached its quota.
-    #   #canister_quota_reached;
-    #   // Some other error.
-    #   #other : Text;
-    # };
+
     result_type =
       {:variant,
        [
@@ -60,15 +50,30 @@ defmodule Factory do
     ICPAgent.call(id(), wallet(), "start_canister", [:principal], [canister_id])
   end
 
+  def rpc_for_chain(chain) do
+    case chain do
+      "moonbeam" -> {"rpc.api.moonbeam.network", "/"}
+      "diode" -> {"prenet.diode.io:8443", "/"}
+      "oasis" -> {"sapphire.oasis.io", "/"}
+      "base" -> {"mainnet.base.org", "/"}
+    end
+  end
+
+  def detect_chain(zone_id) when is_binary(zone_id) do
+    account = DiodeClient.Base16.decode(zone_id)
+
+    cond do
+      DiodeClient.Shell.Base.get_account_root(account) != nil -> "base"
+      DiodeClient.Shell.Moonbeam.get_account_root(account) != nil -> "moonbeam"
+      DiodeClient.Shell.get_account_root(account) != nil -> "diode"
+      DiodeClient.Shell.OasisSapphire.get_account_root(account) != nil -> "oasis"
+      true -> nil
+    end
+  end
+
   def upgrade(canister_id, chain, zone_id, wasm) do
     canister_id = ICPAgent.decode_textual(canister_id)
-
-    {rpc_host, rpc_path} =
-      case chain do
-        "moonbeam" -> {"rpc.api.moonbeam.network", "/"}
-        "diode" -> {"prenet.diode.io:8443", "/"}
-        "oasis" -> {"sapphire.oasis.io", "/"}
-      end
+    {rpc_host, rpc_path} = rpc_for_chain(chain)
 
     type = %{
       zone_id: :text,
@@ -93,6 +98,17 @@ defmodule Factory do
       wasm,
       args
     ])
+  end
+
+  def get_rpc_backend(canister_id) do
+    backend_type =
+      {:variant,
+       [
+         HttpOutcall: {:record, [host: :text, path: :text]},
+         ChainFusion: {:record, [network: {:variant, [BaseMainnet: :null]}]}
+       ]}
+
+    ICPAgent.query(canister_id, wallet(), "get_rpc_backend", [], [], backend_type)
   end
 
   def update_aggregate_quota_settings(max_amount, duration_in_seconds \\ nil) do

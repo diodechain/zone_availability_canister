@@ -76,6 +76,7 @@ upgrade_canister = fn child, chain, zone_id, version, wasms ->
     case version do
       412 -> [:cache, :version, :plain]
       413 -> [:plain, :version, :cache]
+      414 -> [:cache, :plain, :version]
       _ -> [:cache, :plain, :version]
     end
 
@@ -133,7 +134,9 @@ Task.Supervisor.async_stream_nolink(
 
     action =
       if upgrade? do
-        if is_integer(version) and version < 414 do
+        target = Factory.target_zac_version()
+
+        if is_integer(version) and version < target do
           [version] =
             if cached? do
               retry.(child, fn -> ICPAgent.query(child, w, "get_version") end)
@@ -142,15 +145,7 @@ Task.Supervisor.async_stream_nolink(
             end
 
           [zone_id] = ICPAgent.query(child, w, "get_zone_id")
-          account = DiodeClient.Base16.decode(zone_id)
-
-          chain =
-            cond do
-              DiodeClient.Shell.Moonbeam.get_account_root(account) != nil -> "moonbeam"
-              DiodeClient.Shell.get_account_root(account) != nil -> "diode"
-              DiodeClient.Shell.OasisSapphire.get_account_root(account) != nil -> "oasis"
-              true -> nil
-            end
+          chain = Factory.detect_chain(zone_id)
 
           if chain == nil do
             "#{version} - #{zone_id} -> not found on-chain"
@@ -161,8 +156,11 @@ Task.Supervisor.async_stream_nolink(
                 "#{version} - #{zone_id} --> error: #{inspect(reason)}"
 
               _ ->
-                :ets.insert(version_cache, {child, 414})
-                "#{version} - #{zone_id} --> upgraded"
+                :ets.insert(version_cache, {child, target})
+                [new_zone_id] = ICPAgent.query(child, w, "get_zone_id")
+                backend = Factory.get_rpc_backend(child)
+
+                "#{version} - #{zone_id} --> upgraded v#{target} zone=#{new_zone_id} backend=#{inspect(backend)}"
             end
           end
         else

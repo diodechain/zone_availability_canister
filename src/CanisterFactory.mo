@@ -217,7 +217,7 @@ persistent actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    112;
+    113;
   };
 
   public shared func get_stable_size() : async Nat32 {

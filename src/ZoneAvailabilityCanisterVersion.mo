@@ -17,6 +17,8 @@ import Time "mo:base/Time";
 import MetaData "./MetaData";
 import Prim "mo:⛔";
 import DiodeAttachments "./DiodeAttachments";
+import EthRpc "./EthRpc";
+import Text "mo:base/Text";
 import { migration } "ZoneAvailabilityVersionMigration";
 
 (with migration)
@@ -46,7 +48,7 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
   var meta_data : MetaData.MetaData = MetaData.new();
   var attachments : DiodeAttachments.AttachmentStore = DiodeAttachments.new(128_000_000);
   var file_system : DiodeFileSystem.FileSystem = DiodeFileSystem.new(128_000_000);
-  transient let version : Nat = 414;
+  transient let version : Nat = 415;
 
   // Topup rule based on https://cycleops.notion.site/Best-Practices-for-Top-up-Rules-e3e9458ec96f46129533f58016f66f6e
   // When below .7 trillion cycles, topup by .5 trillion (~65 cents)
@@ -443,6 +445,30 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     zone_members.zone_id;
   };
 
+  public query func get_rpc_backend() : async EthRpc.Backend {
+    zone_members.backend;
+  };
+
+  /**
+   * Owner-only rebind for future RPC / backend changes.
+   * Moonbeam→Base fleet migration happens in the Motoko upgrade migration, not here.
+   */
+  public shared (msg) func rebind(zone_id : Text, backend : EthRpc.Backend) : async () {
+    assert_owner(msg.caller);
+    if (zone_id.size() != 42 or not (Text.startsWith(zone_id, #text "0x") or Text.startsWith(zone_id, #text "0X"))) {
+      Debug.trap("Invalid zone_id");
+    };
+    switch (backend) {
+      case (#HttpOutcall({ host; path = _ })) {
+        if (host.size() == 0) {
+          Debug.trap("HttpOutcall host must be non-empty");
+        };
+      };
+      case (#ChainFusion({ network = #BaseMainnet })) {};
+    };
+    zone_members := MemberCache.rebind(zone_members, zone_id, backend);
+  };
+
   public query func get_cycles_balance() : async Nat {
     Cycles.balance();
   };
@@ -478,6 +504,13 @@ shared (_init_msg) persistent actor class ZoneAvailabilityCanister(
     let role = MemberCache.get_role(zone_members, member);
     if (role < 400) {
       Debug.trap("Not an admin");
+    };
+  };
+
+  private func assert_owner(member : Principal) {
+    let role = MemberCache.get_role(zone_members, member);
+    if (role < 500) {
+      Debug.trap("Not an owner");
     };
   };
 };
