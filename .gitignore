@@ -1,5 +1,6 @@
 .mops
 .dfx
+node_modules
 src/declarations
 *.key
 *.pem
@@ -15,3 +16,5 @@ diode_client_interface
 
 # Local docs
 docs/dfinity_milestones2.pdf
+package.json
+package-lock.json

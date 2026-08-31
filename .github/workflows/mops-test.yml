@@ -20,3 +20,14 @@ jobs:
           . ./install_deps.sh
           mops format --check
           ./run_tests.sh
+
+  list-canisters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.16.3"
+          otp-version: "26.2"
+      - name: List factory children (public queries)
+        run: elixir scripts/list_canisters.exs

@@ -26,7 +26,7 @@ module DiodeOracle {
     };
   };
 
-  func create_request(context : Context, to : Text, data : Text) : Types.HttpRequestArgs {
+  public func create_eth_call_request(context : Context, to : Text, data : Text) : Types.HttpRequestArgs {
     if (to.size() != 42) {
       Debug.trap("Invalid 'to' address size: " # debug_show (to.size()));
     };
@@ -55,32 +55,41 @@ module DiodeOracle {
 
   public func create_member_list_request(context : Context, zone_id : Text) : Types.HttpRequestArgs {
     // members()
-    create_request(context, zone_id, "0x6bb04b86");
+    create_eth_call_request(context, zone_id, "0x6bb04b86");
+  };
+
+  public func member_role_calldata(member_address : Text) : Text {
+    // role(address)
+    "0xd4322d7d000000000000000000000000" # member_address;
   };
 
   public func create_member_role_request(context : Context, zone_id : Text, member_address : Text) : Types.HttpRequestArgs {
-    // role(address)
-    let call = "0xd4322d7d000000000000000000000000" # member_address;
-    create_request(context, zone_id, call);
+    create_eth_call_request(context, zone_id, member_role_calldata(member_address));
   };
 
   // RoleWithCallToken(bytes32,address) selector 0xba8f89b4; calldata: selector + bytes32 token + padded address
   // member_address should be 40 hex chars (no 0x prefix) to match ABI encoding
+  public func member_role_with_token_calldata(call_token : Blob, member_address : Text) : Text {
+    let token_hex = Base16.encode(call_token);
+    "0xba8f89b4" # token_hex # "000000000000000000000000" # member_address;
+  };
+
   public func create_member_role_with_token_request(
     context : Context,
     zone_id : Text,
     call_token : Blob,
     member_address : Text,
   ) : Types.HttpRequestArgs {
-    let token_hex = Base16.encode(call_token);
-    let call = "0xba8f89b4" # token_hex # "000000000000000000000000" # member_address;
-    create_request(context, zone_id, call);
+    create_eth_call_request(context, zone_id, member_role_with_token_calldata(call_token, member_address));
+  };
+
+  public func identity_member_calldata(member_address : Text) : Text {
+    // IsMember(address)
+    "0x264560d6000000000000000000000000" # member_address;
   };
 
   public func create_identity_member_request(context : Context, identity_contract_address : Text, member_address : Text) : Types.HttpRequestArgs {
-    // IsMember(address)
-    let call = "0x264560d6000000000000000000000000" # member_address;
-    create_request(context, identity_contract_address, call);
+    create_eth_call_request(context, identity_contract_address, identity_member_calldata(member_address));
   };
 
   public func http_actor() : Types.IC {
@@ -163,5 +172,9 @@ module DiodeOracle {
       case (null) { false };
       case (?blob) { blob_to_nat(blob) == 1 };
     };
+  };
+
+  public func blob_result_to_nat(blob : Blob) : Nat {
+    blob_to_nat(blob);
   };
 };

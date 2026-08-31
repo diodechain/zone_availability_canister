@@ -1,12 +1,9 @@
 #!/usr/bin/env elixir
-Mix.install([:icp_agent, :candid])
+Mix.install([:icp_agent, :candid, {:diode_client, "~> 1.4.12"}])
+Code.eval_file("scripts/factory.ex")
 :erlang.system_flag(:backtrace_depth, 30)
 
-w =
-  File.read!("diode_glmr.key")
-  |> String.trim()
-  |> DiodeClient.Base16.decode()
-  |> DiodeClient.Wallet.from_privkey()
+w = Factory.wallet()
 
 case System.argv() do
   [env, destination_text] ->
@@ -18,7 +15,7 @@ case System.argv() do
           String.trim(id)
 
         "ic" ->
-          "dgnum-qiaaa-aaaao-qj3ta-cai"
+          Factory.id()
       end
 
     destination = ICPAgent.decode_textual(destination_text)
@@ -29,28 +26,16 @@ case System.argv() do
 
     [zone_id] = ICPAgent.query(destination_text, w, "get_zone_id")
     IO.puts("ZoneID: #{zone_id}")
-    account = DiodeClient.Base16.decode(zone_id)
     DiodeClient.interface_add()
 
-    chain =
-      cond do
-        DiodeClient.Shell.Moonbeam.get_account_root(account) != nil -> "moonbeam"
-        DiodeClient.Shell.get_account_root(account) != nil -> "diode"
-        true -> raise "Zone not found on-chain"
-      end
+    chain = Factory.detect_chain(zone_id)
+    if chain == nil, do: raise("Zone not found on-chain")
 
     IO.puts("Chain: #{chain}")
     [version] = ICPAgent.query(destination_text, w, "get_version")
     IO.puts("Current canister version: #{version}")
 
-    {rpc_host, rpc_path} =
-      case chain do
-        "moonbeam" ->
-          {"rpc.api.moonbeam.network", "/"}
-
-        "diode" ->
-          {"prenet.diode.io:8443", "/"}
-      end
+    {rpc_host, rpc_path} = Factory.rpc_for_chain(chain)
 
     type = %{
       zone_id: :text,
@@ -85,9 +70,13 @@ case System.argv() do
       end
 
     [new_version] = ICPAgent.query(destination_text, w, "get_version")
+    [new_zone_id] = ICPAgent.query(destination_text, w, "get_zone_id")
+    backend = Factory.get_rpc_backend(destination_text)
     IO.puts("New canister version: #{new_version}")
+    IO.puts("Zone ID after upgrade: #{new_zone_id}")
+    IO.puts("RPC backend: #{inspect(backend)}")
     IO.puts("Done! Review at: #{url}#{destination_text}")
 
   _ ->
-    IO.puts("Usage: upgrade_canister.exs (local|ic) <destination>")
+    IO.puts("Usage: upgrade_canister.exs (local|ic) <canister_id>")
 end

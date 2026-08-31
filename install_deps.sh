@@ -76,13 +76,11 @@ fi
 
 mops self update
 
-# 4. Initialize mops toolchain
-print_status "Initializing mops toolchain..."
-if [ ! -f ~/.config/mops/toolchain.toml ]; then
-    mops toolchain init
-    # Source to get toolchain changes
-    source ~/.bashrc
-fi
+# 4. Install mops toolchain tools declared in mops.toml
+# (mops >= 3.x no longer has `toolchain init`)
+print_status "Installing mops toolchain..."
+mops toolchain use moc 0.15.1
+mops toolchain use pocket-ic 15.0.0
 
 # 5. Install project dependencies
 print_status "Installing project dependencies with mops..."

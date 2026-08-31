@@ -7,6 +7,7 @@ sha3 = "0.1.1"
 cycles-manager = "https://github.com/CycleOperators/cycles-manager#master@da19c675032aa418b069e979d9f391a36c053a9c"
 ic = "3.0.0"
 icrc1-types = "1.0.0"
+btree = "https://github.com/canscale/StableHeapBTreeMap#v0.3.2"
 
 [dev-dependencies]
 test = "2.1.1"
@@ -14,3 +15,4 @@ bench = "1.0.0"
 
 [toolchain]
 moc = "0.15.1"
+pocket-ic = "15.0.0"

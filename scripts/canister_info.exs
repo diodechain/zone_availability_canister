@@ -1,5 +1,5 @@
 #!/usr/bin/env elixir
-Mix.install([{:icp_agent, "~> 0.1.8"}, :candid, {:diode_client, "~> 1.3.5"}])
+Mix.install([{:icp_agent, "~> 0.1.9"}, :candid, {:diode_client, "~> 1.4.12"}])
 :erlang.system_flag(:backtrace_depth, 30)
 Logger.configure(level: :info)
 

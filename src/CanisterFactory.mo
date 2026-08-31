@@ -151,11 +151,10 @@ persistent actor CanisterFactory {
     };
 
     ignore await cycles_manager_transferCyclesToCanister(canisterId);
-    
+
     await IC.ic.stop_canister({
       canister_id = canisterId;
     });
-
 
     await IC.ic.install_code({
       canister_id = canisterId;
@@ -217,7 +216,7 @@ persistent actor CanisterFactory {
   };
 
   public query func get_version() : async Nat {
-    112;
+    113;
   };
 
   public shared func get_stable_size() : async Nat32 {

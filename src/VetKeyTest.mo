@@ -2,6 +2,7 @@ import Blob "mo:base/Blob";
 import Principal "mo:base/Principal";
 import Cycles "mo:base/ExperimentalCycles";
 import VetKD "VetKD";
+
 actor VetKeyTest {
   public shared func vetkd_public_key(
     canister_id : ?Principal,

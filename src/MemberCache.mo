@@ -3,6 +3,7 @@ import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
 import Eth "./Eth";
+import EthRpc "./EthRpc";
 import Map "mo:map/Map";
 import Oracle "./Oracle";
 import Principal "mo:base/Principal";
@@ -11,19 +12,10 @@ import Time "mo:base/Time";
 module MemberCache {
   public type Cache = {
     zone_id : Text;
-    rpc_host : Text;
-    rpc_path : Text;
+    backend : EthRpc.Backend;
     zone_members : Map.Map<Blob, CacheEntry>;
     transform_function : Oracle.TransformFunction;
     call_token : ?Blob;
-  };
-
-  func context(cache : Cache) : Oracle.Context {
-    {
-      rpc_host = cache.rpc_host;
-      rpc_path = cache.rpc_path;
-      transform_function = cache.transform_function;
-    };
   };
 
   public type CacheEntry = {
@@ -39,33 +31,56 @@ module MemberCache {
     transform_function : Oracle.TransformFunction,
     call_token : ?Blob,
   ) : Cache {
+    new_with_backend(
+      zone_id,
+      EthRpc.backend_from_legacy_host(rpc_host, rpc_path),
+      transform_function,
+      call_token,
+    );
+  };
+
+  public func new_with_backend(
+    zone_id : Text,
+    backend : EthRpc.Backend,
+    transform_function : Oracle.TransformFunction,
+    call_token : ?Blob,
+  ) : Cache {
     {
       zone_id = zone_id;
-      rpc_host = rpc_host;
-      rpc_path = rpc_path;
+      backend = backend;
       transform_function = transform_function;
       zone_members = Map.new();
       call_token = call_token;
     };
   };
 
+  public func rebind(
+    cache : Cache,
+    zone_id : Text,
+    backend : EthRpc.Backend,
+  ) : Cache {
+    {
+      zone_id = zone_id;
+      backend = backend;
+      transform_function = cache.transform_function;
+      zone_members = Map.new();
+      call_token = cache.call_token;
+    };
+  };
+
   func get_zone_role(cache : Cache, member_address_hex : Text) : async Nat {
-    switch (cache.call_token) {
+    let data = switch (cache.call_token) {
       case (null) {
-        await Oracle.get_zone_member_role(context(cache), cache.zone_id, member_address_hex);
+        Oracle.member_role_calldata(member_address_hex);
       };
       case (?token) {
         if (token.size() != 32) {
           throw Error.reject("Invalid call token size: " # debug_show (token.size()));
         };
-        await Oracle.get_zone_member_role_with_token(
-          context(cache),
-          cache.zone_id,
-          token,
-          member_address_hex,
-        );
+        Oracle.member_role_with_token_calldata(token, member_address_hex);
       };
     };
+    await EthRpc.eth_call_nat(cache.backend, cache.transform_function, cache.zone_id, data);
   };
 
   public func update_identity_member(cache : Cache, member_pubkey : Blob, identity_contract : Blob) : async Nat {
@@ -82,9 +97,15 @@ module MemberCache {
     let address_hex = Base16.encode(address);
 
     let identity_contract_hex = Base16.encode(identity_contract);
-    let is_member = await Oracle.is_identity_member(context(cache), "0x" # identity_contract_hex, address_hex);
+    let identity_to = "0x" # identity_contract_hex;
+    let is_member_nat = await EthRpc.eth_call_nat(
+      cache.backend,
+      cache.transform_function,
+      identity_to,
+      Oracle.identity_member_calldata(address_hex),
+    );
 
-    if (not is_member) {
+    if (is_member_nat != 1) {
       throw Error.reject("Member is not in identity");
     };
 
