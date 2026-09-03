@@ -109,8 +109,8 @@ defmodule Factory do
     backend_type =
       {:variant,
        [
-         HttpOutcall: {:record, [host: :text, path: :text]},
-         ChainFusion: {:record, [network: {:variant, [BaseMainnet: :null]}]}
+         HttpOutcall: %{host: :text, path: :text},
+         ChainFusion: %{network: {:variant, [BaseMainnet: :null]}}
        ]}
 
     ICPAgent.query(canister_id, query_wallet(), "get_rpc_backend", [], [], backend_type)
